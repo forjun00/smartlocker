@@ -13,39 +13,50 @@ Usage:
 Requires:  pip install esptool requests
 """
 
-import argparse, os, sys, json, urllib.request, tempfile, subprocess, time
+import argparse, os, sys, json, urllib.request, urllib.error, tempfile, subprocess, time, shutil
 
 REPO = "forjun00/smartlocker"
 ASSET = "firmware.bin"
 
-def latest_release():
-    url = f"https://api.github.com/repos/{REPO}/releases/latest"
+def _gh_available():
+    return shutil.which("gh") is not None
+
+def _gh_download(tag, asset_name, dest_dir):
+    """Use 'gh' CLI for private repos (uses user's existing auth)."""
+    args = ["gh", "release", "download"]
+    if tag: args += [tag]
+    args += ["--repo", REPO, "--pattern", asset_name, "--dir", dest_dir, "--clobber"]
+    print("$ " + " ".join(args))
+    subprocess.check_call(args)
+    return os.path.join(dest_dir, asset_name)
+
+def fetch_release_asset(tag, dest_dir):
+    """Returns path to downloaded firmware.bin. tag=None means latest."""
+    dest = os.path.join(dest_dir, ASSET)
+    # Try public API first
     try:
-        with urllib.request.urlopen(url) as r:
-            return json.load(r)
+        api = (f"https://api.github.com/repos/{REPO}/releases/latest" if tag is None
+               else f"https://api.github.com/repos/{REPO}/releases/tags/{tag}")
+        with urllib.request.urlopen(api) as r:
+            rel = json.load(r)
+        for a in rel.get("assets", []):
+            if a["name"] == ASSET:
+                print(f"  downloading {a['name']} ({a['size']} bytes) from public API")
+                urllib.request.urlretrieve(a["browser_download_url"], dest)
+                return dest
+        raise SystemExit(f"asset '{ASSET}' not found in release {rel.get('tag_name')}")
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            raise SystemExit(
-                f"\nNo releases yet on {REPO}.\n"
-                f"Cut one with:\n"
-                f"  git tag v0.1.0\n"
-                f"  git push origin v0.1.0\n"
-                f"GitHub Actions will build and publish firmware.bin in a few minutes.\n"
-                f"Or pass --file <path>.bin to flash a locally built binary.")
-        raise
-
-def release_by_tag(tag):
-    url = f"https://api.github.com/repos/{REPO}/releases/tags/{tag}"
-    with urllib.request.urlopen(url) as r:
-        return json.load(r)
-
-def download_asset(release, asset_name, dest):
-    for a in release.get("assets", []):
-        if a["name"] == asset_name:
-            print(f"  downloading {a['name']} ({a['size']} bytes)")
-            urllib.request.urlretrieve(a["browser_download_url"], dest)
-            return dest
-    raise SystemExit(f"asset '{asset_name}' not found in release {release['tag_name']}")
+        if e.code not in (401, 404):
+            raise
+    # Private repo (or no release) — fall back to gh CLI
+    if not _gh_available():
+        raise SystemExit(
+            f"\nCould not reach release on {REPO} unauthenticated (probably a private repo).\n"
+            f"Options:\n"
+            f"  - Install GitHub CLI (winget install GitHub.cli) and run `gh auth login`\n"
+            f"  - Or pass --file <path>.bin to flash a locally built binary\n"
+            f"  - Or make the repo public so anyone can download releases")
+    return _gh_download(tag, ASSET, dest_dir)
 
 def list_ports():
     try:
@@ -86,11 +97,8 @@ def main():
     if args.file:
         bin_path = args.file
     else:
-        rel = release_by_tag(args.tag) if args.tag else latest_release()
-        print(f"Release: {rel['tag_name']}  ({rel['published_at']})")
         tmpdir = tempfile.mkdtemp(prefix="smartlocker-")
-        bin_path = os.path.join(tmpdir, ASSET)
-        download_asset(rel, ASSET, bin_path)
+        bin_path = fetch_release_asset(args.tag, tmpdir)
 
     port = args.port or pick_port()
     print(f"\nFlashing {bin_path} to {port}\n")
