@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(mkdir -p smartlocker-app/.claude)",
+      "mcp__Claude_Preview__preview_start",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(netsh advfirewall *)",
+      "PowerShell(netstat -ano)",
+      "Read(//c/Users/forju/Downloads/**)",
+      "Bash(powershell -Command \"Expand-Archive -Path smartlocker.zip -DestinationPath smartlocker_extracted -Force\")",
+      "Bash(npm run *)",
+      "Bash(Get-Process python *)",
+      "Bash(Stop-Process -Force)",
+      "Bash(Start-Sleep -Milliseconds 500)",
+      "Bash(python app.py)",
+      "Bash(ls \"C:\\\\Program Files\\\\mosquitto\" 2>&1 | head -20)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

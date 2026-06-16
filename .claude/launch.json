@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "smartlocker",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "smartlocker-app"],
+      "port": 5173,
+      "autoPort": true
+    }
+  ]
+}

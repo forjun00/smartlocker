@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+backend/lockers.json
+.env
+
+# Node
+node_modules/
+frontend/dist/
+.vite/
+
+# Arduino / ESP32 build output
+esp32/**/build/
+esp32/**/*.bin
+esp32/**/*.elf
+esp32/**/*.map
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# MQTT
+mqtt/data/
+mqtt/log/
