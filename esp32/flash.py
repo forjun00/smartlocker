@@ -20,8 +20,19 @@ ASSET = "firmware.bin"
 
 def latest_release():
     url = f"https://api.github.com/repos/{REPO}/releases/latest"
-    with urllib.request.urlopen(url) as r:
-        return json.load(r)
+    try:
+        with urllib.request.urlopen(url) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise SystemExit(
+                f"\nNo releases yet on {REPO}.\n"
+                f"Cut one with:\n"
+                f"  git tag v0.1.0\n"
+                f"  git push origin v0.1.0\n"
+                f"GitHub Actions will build and publish firmware.bin in a few minutes.\n"
+                f"Or pass --file <path>.bin to flash a locally built binary.")
+        raise
 
 def release_by_tag(tag):
     url = f"https://api.github.com/repos/{REPO}/releases/tags/{tag}"
