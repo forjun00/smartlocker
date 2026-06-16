@@ -107,7 +107,7 @@ void connectMQTT() {
       Serial.println(" connected");
       mqtt.publish(willTopic.c_str(), "online", true);
       mqtt.subscribe((topicBase() + "slot/+/cmd").c_str(), 1);
-      for (int i = 0; i < NUM_SLOTS; i++) {
+      for (int i = 0; i < slotCount; i++) {
         publishState(i);
         if (slots[i].doorPin >= 0) publishDoor(i);
       }

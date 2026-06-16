@@ -1,31 +1,50 @@
 #include "slots.h"
 #include "net.h"
+#include <Preferences.h>
 
-const uint16_t PULSE_MS         = 1000;
+const uint16_t PULSE_MS          = 1000;
 const bool     RELAY_ACTIVE_HIGH = true;
 
-// To add more slots: append rows and bump NUM_SLOTS. Avoid GPIO 0,2,6-11,12,15
-// (boot/strapping/flash) and 34-39 (input only).
-Slot slots[] = {
-  {  1, 25, -1 },
-  {  2, 26, -1 },
-  {  3, 27, -1 },
-  {  4, 14, -1 },
-  {  5, 13, -1 },
-  {  6, 32, -1 },
-  {  7, 33, -1 },
-  {  8, 23, -1 },
-  {  9, 22, -1 },
-  { 10, 21, -1 },
+const int DEFAULT_SLOT_COUNT = 10;
+const int DEFAULT_RELAY_PINS[MAX_SLOTS] = {
+  25, 26, 27, 14, 13, 32, 33, 23, 22, 21,
+  19, 18,  5,  4, 16, 17     // tail slots for expansion (slots 11..16)
 };
-const int NUM_SLOTS = sizeof(slots) / sizeof(slots[0]);
 
-bool relayOn[16];
-bool lockedState[16];
-bool doorClosed[16];
+int  slotCount = DEFAULT_SLOT_COUNT;
+Slot slots[MAX_SLOTS];
+bool relayOn[MAX_SLOTS];
+bool lockedState[MAX_SLOTS];
+bool doorClosed[MAX_SLOTS];
+
+static Preferences prefs;
+
+void loadSlotMapping() {
+  prefs.begin("pins", true);
+  slotCount = prefs.getInt("count", DEFAULT_SLOT_COUNT);
+  if (slotCount < 1)         slotCount = 1;
+  if (slotCount > MAX_SLOTS) slotCount = MAX_SLOTS;
+  for (int i = 0; i < MAX_SLOTS; i++) {
+    char key[6]; snprintf(key, sizeof(key), "p%d", i);
+    int p = prefs.getInt(key, DEFAULT_RELAY_PINS[i]);
+    slots[i] = { i + 1, p, -1 };
+  }
+  prefs.end();
+}
+
+void saveSlotMapping() {
+  prefs.begin("pins", false);
+  prefs.putInt("count", slotCount);
+  for (int i = 0; i < MAX_SLOTS; i++) {
+    char key[6]; snprintf(key, sizeof(key), "p%d", i);
+    prefs.putInt(key, slots[i].relayPin);
+  }
+  prefs.end();
+}
 
 void initSlots() {
-  for (int i = 0; i < NUM_SLOTS; i++) {
+  loadSlotMapping();
+  for (int i = 0; i < slotCount; i++) {
     pinMode(slots[i].relayPin, OUTPUT);
     driveRelay(i, false);
     lockedState[i] = false;
@@ -39,7 +58,7 @@ void initSlots() {
 }
 
 Slot* findSlotById(int id) {
-  for (int i = 0; i < NUM_SLOTS; i++) if (slots[i].id == id) return &slots[i];
+  for (int i = 0; i < slotCount; i++) if (slots[i].id == id) return &slots[i];
   return nullptr;
 }
 
@@ -71,7 +90,7 @@ void manualPulse(int idx) {
 }
 
 void pollDoors() {
-  for (int i = 0; i < NUM_SLOTS; i++) {
+  for (int i = 0; i < slotCount; i++) {
     if (slots[i].doorPin < 0) continue;
     bool closed = digitalRead(slots[i].doorPin) == LOW;
     if (closed != doorClosed[i]) {

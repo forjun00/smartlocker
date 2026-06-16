@@ -57,6 +57,7 @@ static void sendNav(const char* active) {
   http.sendContent("<nav>");
   http.sendContent(String("<a class='") + (strcmp(active,"status")==0?"active":"") + "' href='/'>STATUS</a>");
   http.sendContent(String("<a class='") + (strcmp(active,"config")==0?"active":"") + "' href='/config'>CONFIG</a>");
+  http.sendContent(String("<a class='") + (strcmp(active,"pins")==0?"active":"")   + "' href='/pins'>PINS</a>");
   http.sendContent(String("<a class='") + (strcmp(active,"info")==0?"active":"")   + "' href='/info'>INFO</a>");
   http.sendContent("</nav>");
 }
@@ -70,7 +71,7 @@ static void handleRoot() {
   http.sendContent(htmlEscape(cfg.cabId));
   http.sendContent("</div><h1>Slot status</h1><p class='muted' id='liveTag'>Live &mdash; updating every 1s.</p>");
 
-  for (int i = 0; i < NUM_SLOTS; i++) {
+  for (int i = 0; i < slotCount; i++) {
     String id  = String(slots[i].id);
     String id2 = slots[i].id < 10 ? ("0" + id) : id;
     String c; c.reserve(900);
@@ -199,7 +200,7 @@ static void handleApiUnlock() { Slot* s = findSlotById(http.arg("id").toInt()); 
 
 static void handleApiState() {
   String j = "{\"cab\":\"" + cfg.cabId + "\",\"slots\":[";
-  for (int i = 0; i < NUM_SLOTS; i++) {
+  for (int i = 0; i < slotCount; i++) {
     if (i) j += ",";
     j += "{\"id\":" + String(slots[i].id) +
          ",\"relay\":" + (relayOn[i] ? "true" : "false") +
@@ -208,6 +209,55 @@ static void handleApiState() {
   }
   j += "]}";
   http.send(200, "application/json", j);
+}
+
+static void handlePins() {
+  http.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  http.send(200, "text/html", "");
+  http.sendContent_P(PAGE_HEAD);
+  sendNav("pins");
+  http.sendContent("<h1>Pin mapping</h1><p class='muted'>Set how many slots this cabinet has and which GPIO drives each relay. Saved to flash. Reboots after save.</p>");
+  http.sendContent("<form method='post' action='/pins/save' class='card'>");
+  String s;
+  s += "<label>SLOT COUNT (1&ndash;" + String(MAX_SLOTS) + ")</label>";
+  s += "<input name='count' type='number' min='1' max='" + String(MAX_SLOTS) + "' value='" + String(slotCount) + "'>";
+  s += "<div style='font-size:11px;color:#6E6880;margin-top:8px;line-height:1.5'>Safe GPIOs: 4, 5, 13, 14, 16&ndash;19, 21&ndash;23, 25&ndash;27, 32, 33. Avoid 0, 2, 6&ndash;11, 12, 15, 34&ndash;39.</div>";
+  s += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px'>";
+  for (int i = 0; i < MAX_SLOTS; i++) {
+    String id2 = i + 1 < 10 ? ("0" + String(i + 1)) : String(i + 1);
+    s += "<div><label style='margin:0 0 4px'>SLOT " + id2 + "</label>";
+    s += "<input name='p" + String(i) + "' type='number' min='0' max='39' value='" + String(slots[i].relayPin) + "'></div>";
+  }
+  s += "</div>";
+  s += "<div style='height:14px'></div><button class='primary' type='submit' style='width:100%'>Save &amp; reboot</button>";
+  s += "</form>";
+  http.sendContent(s);
+  http.sendContent("</body></html>");
+  http.sendContent("");
+}
+
+static void handlePinsSave() {
+  if (http.hasArg("count")) {
+    int c = http.arg("count").toInt();
+    if (c < 1)          c = 1;
+    if (c > MAX_SLOTS)  c = MAX_SLOTS;
+    slotCount = c;
+  }
+  for (int i = 0; i < MAX_SLOTS; i++) {
+    String key = "p" + String(i);
+    if (http.hasArg(key)) {
+      int p = http.arg(key).toInt();
+      if (p < 0)  p = 0;
+      if (p > 39) p = 39;
+      slots[i].relayPin = p;
+    }
+  }
+  saveSlotMapping();
+  http.send(200, "text/html",
+    "<meta http-equiv='refresh' content='3;url=/'>"
+    "<body style='font-family:sans-serif;padding:24px'><h2>Saved.</h2><p>Rebooting&hellip;</p></body>");
+  delay(800);
+  ESP.restart();
 }
 
 static void handleReboot() {
@@ -219,6 +269,8 @@ void setupWeb() {
   http.on("/",           HTTP_GET,  handleRoot);
   http.on("/config",     HTTP_GET,  handleConfig);
   http.on("/save",       HTTP_POST, handleSave);
+  http.on("/pins",       HTTP_GET,  handlePins);
+  http.on("/pins/save",  HTTP_POST, handlePinsSave);
   http.on("/info",       HTTP_GET,  handleInfo);
   http.on("/reboot",     HTTP_POST, handleReboot);
   http.on("/api/lock",   HTTP_POST, handleApiLock);
