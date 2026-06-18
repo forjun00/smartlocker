@@ -1,16 +1,19 @@
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from functools import wraps
 import bcrypt
 import json
 import os
 import uuid
 import time
+import datetime
 import paho.mqtt.client as mqtt
 
 app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 CORS(app)
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), 'lockers.json')
+LOG_FILE = os.path.join(os.path.dirname(__file__), 'events.json')
 NUM_LOCKERS = 10
 
 
@@ -36,7 +39,87 @@ MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883))
 CAB_ID    = os.environ.get('CAB_ID', 'cab1')
 
-mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f'smartlocker-backend-{uuid.uuid4().hex[:6]}')
+# ---------------------------------------------------------------------------
+# Activity log
+# ---------------------------------------------------------------------------
+MAX_EVENTS = 500
+events = []
+if os.path.exists(LOG_FILE):
+    try:
+        with open(LOG_FILE, 'r') as f:
+            events = json.load(f)
+    except Exception:
+        events = []
+
+
+def log_event(slot, action, method, ok=True):
+    events.append({
+        'time': datetime.datetime.now().isoformat(timespec='seconds'),
+        'slot': slot,
+        'action': action,     # lock | unlock | open | pickup | reset
+        'method': method,     # passcode | link | rider | admin
+        'ok': ok,
+        'ip': request.remote_addr if request else None,
+    })
+    del events[:-MAX_EVENTS]
+    try:
+        with open(LOG_FILE, 'w') as f:
+            json.dump(events, f, indent=2)
+    except Exception as e:
+        print(f'[LOG] write failed: {e}')
+
+
+# ---------------------------------------------------------------------------
+# Admin sessions (server-side tokens)
+# ---------------------------------------------------------------------------
+SESSION_TTL = 12 * 3600
+admin_tokens = {}   # token -> expires_at
+
+
+def require_admin(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        auth = request.headers.get('Authorization', '')
+        token = auth[7:] if auth.startswith('Bearer ') else ''
+        exp = admin_tokens.get(token)
+        if not exp or time.time() > exp:
+            admin_tokens.pop(token, None)
+            return jsonify({'error': 'Not authorized'}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+# ---------------------------------------------------------------------------
+# MQTT: publish commands, subscribe to door/state feedback
+# ---------------------------------------------------------------------------
+door_status = {}    # slot_id -> 'closed' | 'ajar'
+esp_online = {}     # cab_id -> bool
+
+
+def on_connect(client, userdata, flags, reason_code, properties=None):
+    print(f'[MQTT] connected rc={reason_code}')
+    client.subscribe('smartlocker/+/slot/+/door', qos=1)
+    client.subscribe('smartlocker/+/status', qos=1)
+
+
+def on_message(client, userdata, msg):
+    parts = msg.topic.split('/')
+    payload = msg.payload.decode(errors='replace')
+    try:
+        if len(parts) == 5 and parts[3] and parts[4] == 'door':
+            # smartlocker/<cab>/slot/<n>/door
+            slot = parts[3]
+            door_status[slot] = payload
+        elif len(parts) == 3 and parts[2] == 'status':
+            esp_online[parts[1]] = (payload == 'online')
+    except Exception as e:
+        print(f'[MQTT] msg parse error: {e}')
+
+
+mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
+                          client_id=f'smartlocker-backend-{uuid.uuid4().hex[:6]}')
+mqtt_client.on_connect = on_connect
+mqtt_client.on_message = on_message
 try:
     mqtt_client.connect_async(MQTT_HOST, MQTT_PORT, 30)
     mqtt_client.loop_start()
@@ -53,30 +136,46 @@ def mqtt_pub(slot_id, cmd):
     except Exception as e:
         print(f'[MQTT] publish failed: {e}')
 
-# token -> locker_id  (in-memory, cleared on restart)
+
+# token -> {locker_id, expires_at}  (in-memory pickup links)
 pickup_tokens = {}
+TOKEN_TTL = 8 * 3600
 
 
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 @app.post('/api/admin/login')
 def admin_login():
     password = request.json.get('password', '')
     if password != ADMIN_PASSWORD:
         return jsonify({'error': 'Wrong password'}), 401
-    return jsonify({'success': True})
+    token = uuid.uuid4().hex
+    admin_tokens[token] = time.time() + SESSION_TTL
+    return jsonify({'success': True, 'token': token})
 
 
+# ---------------------------------------------------------------------------
+# Public locker status
+# ---------------------------------------------------------------------------
 @app.get('/api/lockers')
 def get_all_lockers():
-    return jsonify([{'id': k, 'locked': v['locked']} for k, v in lockers.items()])
+    return jsonify([
+        {'id': k, 'locked': v['locked'], 'door': door_status.get(k, 'unknown')}
+        for k, v in lockers.items()
+    ])
 
 
 @app.get('/api/locker/<id>')
 def get_locker(id):
     if id not in lockers:
         return jsonify({'error': 'Locker not found'}), 404
-    return jsonify({'id': id, 'locked': lockers[id]['locked']})
+    return jsonify({'id': id, 'locked': lockers[id]['locked'], 'door': door_status.get(id, 'unknown')})
 
 
+# ---------------------------------------------------------------------------
+# Lock / open / unlock  (public; gated by passcode or slot state)
+# ---------------------------------------------------------------------------
 @app.post('/api/locker/<id>/lock')
 def lock_locker(id):
     if id not in lockers:
@@ -91,6 +190,7 @@ def lock_locker(id):
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     lockers[id] = {'locked': True, 'password_hash': hashed}
     save_lockers(lockers)
+    log_event(id, 'lock', 'passcode')
     return jsonify({'success': True})
 
 
@@ -101,6 +201,7 @@ def open_door(id):
     if lockers[id]['locked']:
         return jsonify({'error': 'Locker is locked — enter passcode to unlock'}), 400
     mqtt_pub(id, 'unlock')
+    log_event(id, 'open', 'rider')
     return jsonify({'success': True})
 
 
@@ -115,18 +216,21 @@ def unlock_locker(id):
     stored_hash = lockers[id]['password_hash'].encode()
 
     if not bcrypt.checkpw(password.encode(), stored_hash):
+        log_event(id, 'unlock', 'passcode', ok=False)
         return jsonify({'error': 'Wrong password'}), 401
 
     lockers[id] = {'locked': False, 'password_hash': None}
     save_lockers(lockers)
     mqtt_pub(id, 'unlock')
+    log_event(id, 'unlock', 'passcode')
     return jsonify({'success': True})
 
 
-TOKEN_TTL = 8 * 3600  # 8 hours in seconds
-
-
+# ---------------------------------------------------------------------------
+# One-time pickup links  (generate = admin only; use = public via token)
+# ---------------------------------------------------------------------------
 @app.post('/api/locker/<id>/generate-token')
+@require_admin
 def generate_token(id):
     if id not in lockers:
         return jsonify({'error': 'Locker not found'}), 404
@@ -153,19 +257,29 @@ def use_token(token):
     save_lockers(lockers)
     del pickup_tokens[token]
     mqtt_pub(locker_id, 'unlock')
+    log_event(locker_id, 'pickup', 'link')
     return jsonify({'success': True, 'locker_id': locker_id})
 
 
+# ---------------------------------------------------------------------------
+# Admin: reset + activity log
+# ---------------------------------------------------------------------------
 @app.post('/api/locker/<id>/reset')
+@require_admin
 def reset_locker(id):
     if id not in lockers:
         return jsonify({'error': 'Locker not found'}), 404
-    admin_password = request.json.get('admin_password', '')
-    if admin_password != ADMIN_PASSWORD:
-        return jsonify({'error': 'Wrong admin password'}), 401
     lockers[id] = {'locked': False, 'password_hash': None}
     save_lockers(lockers)
+    mqtt_pub(id, 'unlock')
+    log_event(id, 'reset', 'admin')
     return jsonify({'success': True})
+
+
+@app.get('/api/log')
+@require_admin
+def get_log():
+    return jsonify(list(reversed(events[-100:])))
 
 
 # Serve React frontend (SPA fallback)

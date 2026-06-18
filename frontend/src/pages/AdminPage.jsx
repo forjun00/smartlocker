@@ -23,38 +23,39 @@ function fallbackCopy(text) {
 
 function pad(n) { return String(n).padStart(2, '0') }
 
-export default function AdminPage({ onLogout }) {
+export default function AdminPage({ token, onLogout }) {
   const navigate = useNavigate()
   const [lockers, setLockers] = useState([])
   const [baseUrl, setBaseUrl] = useState(window.location.origin)
-  const [adminPw, setAdminPw] = useState('')
   const [resetMsg, setResetMsg] = useState({})
   const [unlockLinks, setUnlockLinks] = useState({})
   const [generatingLink, setGeneratingLink] = useState({})
   const [copied, setCopied] = useState({})
   const [expanded, setExpanded] = useState(null)
+  const [log, setLog] = useState([])
+  const [showLog, setShowLog] = useState(false)
+
+  const authHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+  const guard = (res) => { if (res.status === 401) onLogout(); return res }
 
   const refresh = () => fetch('/api/lockers').then(r => r.json()).then(setLockers)
-  useEffect(() => { refresh() }, [])
+  const refreshLog = () => fetch('/api/log', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : []).then(setLog)
+  useEffect(() => { refresh(); refreshLog() }, [])
+  useEffect(() => { const t = setInterval(refresh, 4000); return () => clearInterval(t) }, [])
 
   const generateLink = async (id) => {
     setGeneratingLink(g => ({ ...g, [id]: true }))
-    const res = await fetch(`/api/locker/${id}/generate-token`, { method: 'POST' })
+    const res = guard(await fetch(`/api/locker/${id}/generate-token`, { method: 'POST', headers: authHeaders }))
     const data = await res.json()
     setGeneratingLink(g => ({ ...g, [id]: false }))
     if (res.ok) setUnlockLinks(l => ({ ...l, [id]: `${baseUrl}/pickup/${data.token}` }))
   }
 
   const handleReset = async (id) => {
-    if (!adminPw) return setResetMsg({ [id]: 'Enter the admin passcode above first.' })
-    const res = await fetch(`/api/locker/${id}/reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ admin_password: adminPw }),
-    })
+    const res = guard(await fetch(`/api/locker/${id}/reset`, { method: 'POST', headers: authHeaders }))
     const data = await res.json()
     setResetMsg({ [id]: res.ok ? 'Slot reset — open again.' : data.error })
-    refresh()
+    refresh(); refreshLog()
     setTimeout(() => setResetMsg(m => { const n = {...m}; delete n[id]; return n }), 2800)
   }
 
@@ -106,15 +107,11 @@ export default function AdminPage({ onLogout }) {
         ))}
       </div>
 
-      {/* Base URL + admin pw controls */}
+      {/* Base URL control */}
       <div style={{ marginBottom: 20, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 20, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'riseIn 0.5s 0.2s cubic-bezier(0.2,0.7,0.2,1) both' }}>
         <div>
           <label style={{ display: 'block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.16em', color: '#8A8499', marginBottom: 6 }}>BASE URL</label>
           <input className="sl-input" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
-        </div>
-        <div>
-          <label style={{ display: 'block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.16em', color: '#8A8499', marginBottom: 6 }}>ADMIN PASSCODE</label>
-          <input className="sl-input" type="password" placeholder="For slot resets" value={adminPw} onChange={e => setAdminPw(e.target.value)} />
         </div>
       </div>
 
@@ -139,6 +136,30 @@ export default function AdminPage({ onLogout }) {
             onClearLink={() => setUnlockLinks(l => { const n = {...l}; delete n[locker.id]; return n })}
           />
         ))}
+      </div>
+
+      {/* Activity log */}
+      <div style={{ marginTop: 24 }}>
+        <button onClick={() => { setShowLog(s => !s); refreshLog() }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 16, padding: '13px 16px', cursor: 'pointer' }}>
+          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: '0.14em', color: '#6E6880' }}>ACTIVITY LOG</span>
+          <span style={{ fontSize: 12, color: '#ABA4BC', transform: showLog ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+        </button>
+        {showLog && (
+          <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 16, overflow: 'hidden', animation: 'riseIn 0.3s both' }}>
+            {log.length === 0 && <div style={{ padding: 16, fontSize: 13, color: '#8A8499', textAlign: 'center' }}>No activity yet.</div>}
+            {log.map((e, i) => {
+              const c = e.ok ? { bg: 'oklch(0.93 0.05 165)', fg: 'oklch(0.42 0.09 165)' } : { bg: 'oklch(0.93 0.05 30)', fg: 'oklch(0.45 0.11 30)' }
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i ? '1px solid rgba(43,39,51,0.05)' : 'none' }}>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 700, minWidth: 26 }}>{pad(e.slot)}</span>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: '0.1em', padding: '3px 8px', borderRadius: 999, background: c.bg, color: c.fg, textTransform: 'uppercase' }}>{e.action}{e.ok ? '' : ' ✗'}</span>
+                  <span style={{ fontSize: 12, color: '#8A8499' }}>{e.method}</span>
+                  <span style={{ marginLeft: 'auto', fontFamily: "'Space Mono', monospace", fontSize: 10, color: '#ABA4BC' }}>{e.time.replace('T', ' ').slice(5)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -251,6 +272,14 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
           <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.08em', color: '#8A8499', marginTop: 3 }}>
             {locked ? 'Occupied · parcel inside' : 'Available · ready for drop'}
           </div>
+          {locker.door && locker.door !== 'unknown' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: '0.08em', padding: '3px 8px', borderRadius: 999,
+              background: locker.door === 'ajar' ? 'oklch(0.93 0.05 30)' : 'oklch(0.93 0.05 165)',
+              color: locker.door === 'ajar' ? 'oklch(0.45 0.11 30)' : 'oklch(0.42 0.09 165)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
+              DOOR {locker.door === 'ajar' ? 'AJAR' : 'CLOSED'}
+            </div>
+          )}
         </div>
 
         {/* Status pill */}

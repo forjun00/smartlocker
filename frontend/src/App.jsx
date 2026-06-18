@@ -9,7 +9,8 @@ import LoginPage from './pages/LoginPage'
 
 export default function App() {
   const { pathname } = useLocation()
-  const [authed, setAuthed] = useState(sessionStorage.getItem('adminAuthed') === '1')
+  const [token, setToken] = useState(sessionStorage.getItem('adminToken') || '')
+  const authed = !!token
   const showNav = !pathname.startsWith('/pickup/')
   const isAdmin = pathname === '/'
 
@@ -21,8 +22,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={
             authed
-              ? <AdminPage onLogout={() => { sessionStorage.removeItem('adminAuthed'); setAuthed(false) }} />
-              : <LoginPage onLogin={() => setAuthed(true)} />
+              ? <AdminPage token={token} onLogout={() => { sessionStorage.removeItem('adminToken'); setToken('') }} />
+              : <LoginPage onLogin={(t) => { sessionStorage.setItem('adminToken', t); setToken(t) }} />
           } />
           <Route path="/locker/:id" element={<LockerPage />} />
           <Route path="/pickup/:token" element={<PickupPage />} />

@@ -221,12 +221,14 @@ static void handlePins() {
   String s;
   s += "<label>SLOT COUNT (1&ndash;" + String(MAX_SLOTS) + ")</label>";
   s += "<input name='count' type='number' min='1' max='" + String(MAX_SLOTS) + "' value='" + String(slotCount) + "'>";
-  s += "<div style='font-size:11px;color:#6E6880;margin-top:8px;line-height:1.5'>Safe GPIOs: 4, 5, 13, 14, 16&ndash;19, 21&ndash;23, 25&ndash;27, 32, 33. Avoid 0, 2, 6&ndash;11, 12, 15, 34&ndash;39.</div>";
-  s += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px'>";
+  s += "<div style='font-size:11px;color:#6E6880;margin-top:8px;line-height:1.5'>Relay = lock output. Door = reed-switch sensor (set -1 if none). Safe GPIOs: 4, 5, 13, 14, 16&ndash;19, 21&ndash;23, 25&ndash;27, 32, 33; sensors may also use input-only 34&ndash;39. Avoid 0, 2, 6&ndash;11, 12, 15.</div>";
+  s += "<div style='display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;margin-top:14px;align-items:center'>";
+  s += "<div></div><label style='margin:0'>RELAY GPIO</label><label style='margin:0'>DOOR GPIO (-1=none)</label>";
   for (int i = 0; i < MAX_SLOTS; i++) {
     String id2 = i + 1 < 10 ? ("0" + String(i + 1)) : String(i + 1);
-    s += "<div><label style='margin:0 0 4px'>SLOT " + id2 + "</label>";
-    s += "<input name='p" + String(i) + "' type='number' min='0' max='39' value='" + String(slots[i].relayPin) + "'></div>";
+    s += "<div style='font-family:monospace;font-size:12px;color:#6E6880'>SLOT " + id2 + "</div>";
+    s += "<input name='p" + String(i) + "' type='number' min='0' max='39' value='" + String(slots[i].relayPin) + "'>";
+    s += "<input name='d" + String(i) + "' type='number' min='-1' max='39' value='" + String(slots[i].doorPin) + "'>";
   }
   s += "</div>";
   s += "<div style='height:14px'></div><button class='primary' type='submit' style='width:100%'>Save &amp; reboot</button>";
@@ -244,12 +246,19 @@ static void handlePinsSave() {
     slotCount = c;
   }
   for (int i = 0; i < MAX_SLOTS; i++) {
-    String key = "p" + String(i);
-    if (http.hasArg(key)) {
-      int p = http.arg(key).toInt();
+    String rk = "p" + String(i);
+    if (http.hasArg(rk)) {
+      int p = http.arg(rk).toInt();
       if (p < 0)  p = 0;
       if (p > 39) p = 39;
       slots[i].relayPin = p;
+    }
+    String dk = "d" + String(i);
+    if (http.hasArg(dk)) {
+      int d = http.arg(dk).toInt();
+      if (d < -1) d = -1;
+      if (d > 39) d = 39;
+      slots[i].doorPin = d;
     }
   }
   saveSlotMapping();

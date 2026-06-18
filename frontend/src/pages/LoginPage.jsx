@@ -17,7 +17,7 @@ export default function LoginPage({ onLogin }) {
     })
     const data = await res.json()
     setBusy(false)
-    if (res.ok) { sessionStorage.setItem('adminAuthed', '1'); onLogin() }
+    if (res.ok) { onLogin(data.token) }
     else setError(data.error || 'Wrong password.')
   }
 
