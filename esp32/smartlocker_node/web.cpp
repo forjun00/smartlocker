@@ -2,6 +2,7 @@
 #include "config.h"
 #include "slots.h"
 #include "net.h"
+#include "version.h"
 #include <WiFi.h>
 
 WebServer http(80);
@@ -60,6 +61,7 @@ static void sendNav(const char* active) {
   http.sendContent(String("<a class='") + (strcmp(active,"pins")==0?"active":"")   + "' href='/pins'>PINS</a>");
   http.sendContent(String("<a class='") + (strcmp(active,"info")==0?"active":"")   + "' href='/info'>INFO</a>");
   http.sendContent("</nav>");
+  http.sendContent("<div style='text-align:center;font-family:\"Space Mono\",monospace;font-size:10px;letter-spacing:.12em;color:#ABA4BC;margin:-6px 0 14px'>FIRMWARE " FW_VERSION "</div>");
 }
 
 static void handleRoot() {
@@ -189,6 +191,7 @@ static void handleInfo() {
   sendNav("info");
   http.sendContent("<h1>Info</h1>");
   String body = "<div class='card'>";
+  body += "<div class='kv'><span>Firmware</span><span style='font-weight:700'>" FW_VERSION "</span></div>";
   body += "<div class='kv'><span>Mode</span><span>" + String(apMode ? "AP (setup)" : (cfg.apAlways ? "AP+STA" : "Station")) + "</span></div>";
   body += "<div class='kv'><span>IP</span><span>" + (apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString()) + "</span></div>";
   if (cfg.apAlways && !apMode) {

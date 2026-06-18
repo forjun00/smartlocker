@@ -13,11 +13,12 @@
 #include "net.h"
 #include "web.h"
 #include "ota.h"
+#include "version.h"
 
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\nSmartLocker ESP32 node booting");
+  Serial.println("\nSmartLocker ESP32 node booting  " FW_VERSION);
 
   bootMs = millis();
   loadConfig();
