@@ -39,26 +39,41 @@ static bool updateFromUrl(const String& url, String* err) {
     return false;
   }
 
-  int len = http.getSize();
-  if (len <= 0) {
-    if (err) *err = "no content length";
-    http.end();
-    return false;
+  int len = http.getSize();   // may be -1 (chunked) after GitHub's redirect
+  if (len > 0) {
+    if (!Update.begin(len)) { if (err) *err = "not enough space"; http.end(); return false; }
+  } else {
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { if (err) *err = "begin failed"; http.end(); return false; }
   }
+  Serial.printf("[OTA-url] downloading (declared size %d)\n", len);
 
-  if (!Update.begin(len)) {
-    if (err) *err = "not enough space";
-    http.end();
-    return false;
-  }
-
-  Serial.printf("[OTA-url] flashing %d bytes\n", len);
+  // Stream the body manually so we don't depend on Content-Length.
   WiFiClient* stream = http.getStreamPtr();
-  size_t written = Update.writeStream(*stream);
+  uint8_t buf[1024];
+  size_t written = 0;
+  uint32_t lastData = millis();
+  while (stream->connected() || stream->available()) {
+    size_t avail = stream->available();
+    if (avail) {
+      int n = stream->readBytes(buf, avail > sizeof(buf) ? sizeof(buf) : avail);
+      if (n > 0) {
+        if (Update.write(buf, n) != (size_t)n) {
+          if (err) *err = "flash write error";
+          Update.abort(); http.end(); return false;
+        }
+        written += n;
+        lastData = millis();
+      }
+    } else {
+      if (len > 0 && written >= (size_t)len) break;   // got it all
+      if (millis() - lastData > 10000) break;          // stall timeout
+      delay(1);
+    }
+  }
   http.end();
 
-  if (written != (size_t)len) {
-    if (err) *err = "wrote " + String(written) + "/" + String(len);
+  if (written < 100000) {   // a real firmware is ~1 MB; anything tiny = error page
+    if (err) *err = "short download (" + String(written) + " bytes)";
     Update.abort();
     return false;
   }
@@ -67,7 +82,7 @@ static bool updateFromUrl(const String& url, String* err) {
     return false;
   }
 
-  Serial.println("[OTA-url] OK, rebooting");
+  Serial.printf("[OTA-url] OK, wrote %u bytes, rebooting\n", written);
   delay(500);
   ESP.restart();
   return true;
