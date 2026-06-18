@@ -26,10 +26,8 @@ void loadSlotMapping() {
   if (slotCount > MAX_SLOTS) slotCount = MAX_SLOTS;
   for (int i = 0; i < MAX_SLOTS; i++) {
     char rk[6]; snprintf(rk, sizeof(rk), "p%d", i);
-    char dk[6]; snprintf(dk, sizeof(dk), "d%d", i);
     int relay = prefs.getInt(rk, DEFAULT_RELAY_PINS[i]);
-    int door  = prefs.getInt(dk, -1);          // -1 = no sensor (default)
-    slots[i] = { i + 1, relay, door };
+    slots[i] = { i + 1, relay, -1 };           // no door sensor
   }
   prefs.end();
 }
@@ -39,9 +37,7 @@ void saveSlotMapping() {
   prefs.putInt("count", slotCount);
   for (int i = 0; i < MAX_SLOTS; i++) {
     char rk[6]; snprintf(rk, sizeof(rk), "p%d", i);
-    char dk[6]; snprintf(dk, sizeof(dk), "d%d", i);
     prefs.putInt(rk, slots[i].relayPin);
-    prefs.putInt(dk, slots[i].doorPin);
   }
   prefs.end();
 }

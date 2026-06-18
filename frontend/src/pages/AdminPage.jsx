@@ -272,14 +272,6 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
           <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.08em', color: '#8A8499', marginTop: 3 }}>
             {locked ? 'Occupied · parcel inside' : 'Available · ready for drop'}
           </div>
-          {locker.door && locker.door !== 'unknown' && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: '0.08em', padding: '3px 8px', borderRadius: 999,
-              background: locker.door === 'ajar' ? 'oklch(0.93 0.05 30)' : 'oklch(0.93 0.05 165)',
-              color: locker.door === 'ajar' ? 'oklch(0.45 0.11 30)' : 'oklch(0.42 0.09 165)' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />
-              DOOR {locker.door === 'ajar' ? 'AJAR' : 'CLOSED'}
-            </div>
-          )}
         </div>
 
         {/* Status pill */}

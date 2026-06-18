@@ -90,36 +90,10 @@ def require_admin(fn):
 
 
 # ---------------------------------------------------------------------------
-# MQTT: publish commands, subscribe to door/state feedback
+# MQTT: publish lock/unlock commands
 # ---------------------------------------------------------------------------
-door_status = {}    # slot_id -> 'closed' | 'ajar'
-esp_online = {}     # cab_id -> bool
-
-
-def on_connect(client, userdata, flags, reason_code, properties=None):
-    print(f'[MQTT] connected rc={reason_code}')
-    client.subscribe('smartlocker/+/slot/+/door', qos=1)
-    client.subscribe('smartlocker/+/status', qos=1)
-
-
-def on_message(client, userdata, msg):
-    parts = msg.topic.split('/')
-    payload = msg.payload.decode(errors='replace')
-    try:
-        if len(parts) == 5 and parts[3] and parts[4] == 'door':
-            # smartlocker/<cab>/slot/<n>/door
-            slot = parts[3]
-            door_status[slot] = payload
-        elif len(parts) == 3 and parts[2] == 'status':
-            esp_online[parts[1]] = (payload == 'online')
-    except Exception as e:
-        print(f'[MQTT] msg parse error: {e}')
-
-
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,
                           client_id=f'smartlocker-backend-{uuid.uuid4().hex[:6]}')
-mqtt_client.on_connect = on_connect
-mqtt_client.on_message = on_message
 try:
     mqtt_client.connect_async(MQTT_HOST, MQTT_PORT, 30)
     mqtt_client.loop_start()
@@ -160,17 +134,14 @@ def admin_login():
 # ---------------------------------------------------------------------------
 @app.get('/api/lockers')
 def get_all_lockers():
-    return jsonify([
-        {'id': k, 'locked': v['locked'], 'door': door_status.get(k, 'unknown')}
-        for k, v in lockers.items()
-    ])
+    return jsonify([{'id': k, 'locked': v['locked']} for k, v in lockers.items()])
 
 
 @app.get('/api/locker/<id>')
 def get_locker(id):
     if id not in lockers:
         return jsonify({'error': 'Locker not found'}), 404
-    return jsonify({'id': id, 'locked': lockers[id]['locked'], 'door': door_status.get(id, 'unknown')})
+    return jsonify({'id': id, 'locked': lockers[id]['locked']})
 
 
 # ---------------------------------------------------------------------------
