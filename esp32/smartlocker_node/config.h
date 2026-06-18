@@ -16,6 +16,8 @@ struct Config {
   String   staticDns;
   String   otaPass;     // empty = no OTA password
   String   updateUrl;   // direct .bin URL (e.g. GitHub release "latest" asset)
+  bool     apAlways;    // always broadcast own AP (AP+STA), even when on WiFi
+  String   apPass;      // password for the always-on AP (>=8 chars, or open)
 };
 
 extern Config cfg;

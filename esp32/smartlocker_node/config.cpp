@@ -20,6 +20,8 @@ void loadConfig() {
   cfg.staticDns  = prefs.getString("sdns",    "8.8.8.8");
   cfg.otaPass    = prefs.getString("otap",    "");
   cfg.updateUrl  = prefs.getString("uurl",    "");
+  cfg.apAlways   = prefs.getBool  ("apalw",   false);
+  cfg.apPass     = prefs.getString("appass",  "smartlocker");
   prefs.end();
 }
 
@@ -39,5 +41,7 @@ void saveConfig() {
   prefs.putString("sdns",    cfg.staticDns);
   prefs.putString("otap",    cfg.otaPass);
   prefs.putString("uurl",    cfg.updateUrl);
+  prefs.putBool  ("apalw",   cfg.apAlways);
+  prefs.putString("appass",  cfg.apPass);
   prefs.end();
 }

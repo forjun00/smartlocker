@@ -142,6 +142,14 @@ static void handleConfig() {
   form += "<input name='otap' type='password' value='" + htmlEscape(cfg.otaPass) + "'>";
   form += "<label>UPDATE URL (direct .bin link)</label>";
   form += "<input name='uurl' placeholder='https://github.com/.../releases/latest/download/firmware.bin' value='" + htmlEscape(cfg.updateUrl) + "' style='font-size:12px'>";
+  form += "<label style='margin-top:18px'>DIRECT ACCESS AP</label>";
+  form += "<label style='display:flex;align-items:center;gap:8px;letter-spacing:0;font-size:13px;color:var(--ink);font-family:inherit;margin:6px 0 4px'>";
+  form += "<input type='checkbox' name='apalw' value='1' style='width:auto'";
+  if (cfg.apAlways) form += " checked";
+  form += "> Always broadcast own Wi-Fi (AP+STA)</label>";
+  form += "<div style='font-size:11px;color:#6E6880;margin-bottom:4px'>SSID will be <b>SmartLocker-" + htmlEscape(cfg.cabId) + "</b>. Connect to it to reach this page directly even if the router is down.</div>";
+  form += "<label>AP PASSWORD (min 8 chars, blank/short = open)</label>";
+  form += "<input name='appass' value='" + htmlEscape(cfg.apPass) + "'>";
   form += "<div style='height:14px'></div><button class='primary' type='submit' style='width:100%'>Save &amp; reboot</button>";
   form += "</form>";
   http.sendContent(form);
@@ -164,6 +172,8 @@ static void handleSave() {
   if (http.hasArg("sdns"))  cfg.staticDns  = http.arg("sdns");
   if (http.hasArg("otap"))  cfg.otaPass    = http.arg("otap");
   if (http.hasArg("uurl"))  cfg.updateUrl  = http.arg("uurl");
+  cfg.apAlways = http.hasArg("apalw");
+  if (http.hasArg("appass")) cfg.apPass    = http.arg("appass");
   saveConfig();
   http.send(200, "text/html",
     "<meta http-equiv='refresh' content='3;url=/'>"
@@ -179,8 +189,12 @@ static void handleInfo() {
   sendNav("info");
   http.sendContent("<h1>Info</h1>");
   String body = "<div class='card'>";
-  body += "<div class='kv'><span>Mode</span><span>" + String(apMode ? "AP (setup)" : "Station") + "</span></div>";
+  body += "<div class='kv'><span>Mode</span><span>" + String(apMode ? "AP (setup)" : (cfg.apAlways ? "AP+STA" : "Station")) + "</span></div>";
   body += "<div class='kv'><span>IP</span><span>" + (apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString()) + "</span></div>";
+  if (cfg.apAlways && !apMode) {
+    body += "<div class='kv'><span>Shared AP</span><span>SmartLocker-" + htmlEscape(cfg.cabId) + "</span></div>";
+    body += "<div class='kv'><span>AP IP</span><span>" + WiFi.softAPIP().toString() + "</span></div>";
+  }
   body += "<div class='kv'><span>MAC</span><span>" + WiFi.macAddress() + "</span></div>";
   body += "<div class='kv'><span>WiFi RSSI</span><span>" + String(WiFi.RSSI()) + " dBm</span></div>";
   body += "<div class='kv'><span>MQTT</span><span>" + String(mqtt.connected() ? "connected" : "disconnected") + "</span></div>";

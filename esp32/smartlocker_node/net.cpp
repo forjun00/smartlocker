@@ -49,10 +49,22 @@ static void onMessage(char* tpc, byte* payload, unsigned int len) {
   else if (body == "release")                    driveRelay(idx, false);
 }
 
+static void startSharedAP() {
+  // Always-on AP alongside the station connection (AP+STA).
+  String ssid = String("SmartLocker-") + cfg.cabId;
+  bool secured = cfg.apPass.length() >= 8;   // WPA2 needs >=8 chars
+  if (secured) WiFi.softAP(ssid.c_str(), cfg.apPass.c_str());
+  else         WiFi.softAP(ssid.c_str());     // open if password too short
+  Serial.printf("Shared AP '%s' %s at http://%s\n",
+                ssid.c_str(), secured ? "(WPA2)" : "(open)",
+                WiFi.softAPIP().toString().c_str());
+}
+
 bool connectWiFi(uint32_t timeoutMs) {
   if (cfg.wifiSsid.length() == 0) return false;
   Serial.printf("WiFi connecting to %s\n", cfg.wifiSsid.c_str());
-  WiFi.mode(WIFI_STA);
+  WiFi.mode(cfg.apAlways ? WIFI_AP_STA : WIFI_STA);
+  if (cfg.apAlways) startSharedAP();
   if (cfg.useStatic && cfg.staticIp.length() && cfg.staticGw.length()) {
     IPAddress ip, gw, mask, dns;
     if (ip.fromString(cfg.staticIp) && gw.fromString(cfg.staticGw) &&
