@@ -10,82 +10,68 @@
 
 static bool otaActive = false;
 
-// Pull firmware from a URL (HTTP or HTTPS) and apply it.
-// Uses HTTPClient (follows GitHub's cross-host redirect correctly) and streams
-// the body straight into Update. Returns true on success (then reboots).
+// Resolve HTTP redirects manually (GitHub: github.com -> objects.githubusercontent.com).
+// Returns the final direct URL whose response is a clean 200 with Content-Length,
+// avoiding HTTPClient's buggy auto-redirect size handling and chunked framing.
+static String resolveFinalUrl(const String& startUrl, String* err) {
+  String url = startUrl;
+  WiFiClient plain;
+  for (int hop = 0; hop < 6; hop++) {
+    WiFiClientSecure tls; tls.setInsecure();
+    HTTPClient http;
+    bool https = url.startsWith("https://");
+    bool ok = https ? http.begin(tls, url) : http.begin(plain, url);
+    if (!ok) { if (err) *err = "begin failed"; return ""; }
+    http.setUserAgent("SmartLocker-ESP32");
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    const char* keys[] = { "Location" };
+    http.collectHeaders(keys, 1);
+    int code = http.sendRequest("HEAD");
+    if (code == HTTP_CODE_OK) { http.end(); return url; }          // final
+    if (code > 300 && code < 400) {
+      String loc = http.header("Location");
+      http.end();
+      if (!loc.length()) { if (err) *err = "redirect without Location"; return ""; }
+      url = loc;
+      continue;
+    }
+    http.end();
+    if (err) *err = "HTTP " + String(code);
+    return "";
+  }
+  if (err) *err = "too many redirects";
+  return "";
+}
+
+// Pull firmware from a URL and apply it. Returns true on success (then reboots).
 static bool updateFromUrl(const String& url, String* err) {
   if (url.length() == 0) { if (err) *err = "no URL set"; return false; }
-  Serial.printf("[OTA-url] fetching %s\n", url.c_str());
+  Serial.printf("[OTA-url] start %s\n", url.c_str());
 
-  WiFiClient   plain;
-  WiFiClientSecure tls;
-  tls.setInsecure();  // GitHub uses HTTPS; skip CA bundle
-
-  HTTPClient http;
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-  http.setUserAgent("SmartLocker-ESP32");
-  http.setTimeout(15000);
-
-  bool ok;
-  if (url.startsWith("https://")) ok = http.begin(tls, url);
-  else                            ok = http.begin(plain, url);
-  if (!ok) { if (err) *err = "begin failed"; return false; }
-
-  int code = http.GET();
-  if (code != HTTP_CODE_OK) {
-    if (err) *err = "HTTP " + String(code);
-    Serial.printf("[OTA-url] GET -> %d\n", code);
-    http.end();
+  String finalUrl = resolveFinalUrl(url, err);
+  if (!finalUrl.length()) {
+    Serial.printf("[OTA-url] resolve failed: %s\n", err ? err->c_str() : "");
     return false;
   }
+  Serial.printf("[OTA-url] final %s\n", finalUrl.c_str());
 
-  int len = http.getSize();   // may be -1 (chunked) after GitHub's redirect
-  if (len > 0) {
-    if (!Update.begin(len)) { if (err) *err = "not enough space"; http.end(); return false; }
-  } else {
-    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { if (err) *err = "begin failed"; http.end(); return false; }
-  }
-  Serial.printf("[OTA-url] downloading (declared size %d)\n", len);
+  // The final URL has a clean Content-Length and no further redirect, so the
+  // proven httpUpdate library flashes + activates it correctly.
+  httpUpdate.rebootOnUpdate(true);
+  httpUpdate.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
 
-  // Stream the body manually so we don't depend on Content-Length.
-  WiFiClient* stream = http.getStreamPtr();
-  uint8_t buf[1024];
-  size_t written = 0;
-  uint32_t lastData = millis();
-  while (stream->connected() || stream->available()) {
-    size_t avail = stream->available();
-    if (avail) {
-      int n = stream->readBytes(buf, avail > sizeof(buf) ? sizeof(buf) : avail);
-      if (n > 0) {
-        if (Update.write(buf, n) != (size_t)n) {
-          if (err) *err = "flash write error";
-          Update.abort(); http.end(); return false;
-        }
-        written += n;
-        lastData = millis();
-      }
-    } else {
-      if (len > 0 && written >= (size_t)len) break;   // got it all
-      if (millis() - lastData > 10000) break;          // stall timeout
-      delay(1);
-    }
-  }
-  http.end();
+  WiFiClient plain;
+  WiFiClientSecure tls; tls.setInsecure();
+  t_httpUpdate_return r = finalUrl.startsWith("https://")
+      ? httpUpdate.update(tls,   finalUrl)
+      : httpUpdate.update(plain, finalUrl);
 
-  if (written < 100000) {   // a real firmware is ~1 MB; anything tiny = error page
-    if (err) *err = "short download (" + String(written) + " bytes)";
-    Update.abort();
+  if (r == HTTP_UPDATE_FAILED) {
+    if (err) *err = httpUpdate.getLastErrorString();
+    Serial.printf("[OTA-url] FAILED: %s\n", httpUpdate.getLastErrorString().c_str());
     return false;
   }
-  if (!Update.end(true)) {
-    if (err) *err = "finalize: " + String(Update.errorString());
-    return false;
-  }
-
-  Serial.printf("[OTA-url] OK, wrote %u bytes, rebooting\n", written);
-  delay(500);
-  ESP.restart();
-  return true;
+  return true;   // HTTP_UPDATE_OK -> device reboots
 }
 
 void setupOTA() {
