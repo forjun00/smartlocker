@@ -11,34 +11,66 @@
 static bool otaActive = false;
 
 // Pull firmware from a URL (HTTP or HTTPS) and apply it.
-// Returns true on success (device will reboot before returning, in practice).
+// Uses HTTPClient (follows GitHub's cross-host redirect correctly) and streams
+// the body straight into Update. Returns true on success (then reboots).
 static bool updateFromUrl(const String& url, String* err) {
   if (url.length() == 0) { if (err) *err = "no URL set"; return false; }
   Serial.printf("[OTA-url] fetching %s\n", url.c_str());
 
   WiFiClient   plain;
   WiFiClientSecure tls;
-  tls.setInsecure();  // trust GitHub redirect chain without bundled CA
+  tls.setInsecure();  // GitHub uses HTTPS; skip CA bundle
 
-  httpUpdate.rebootOnUpdate(true);
-  httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+  HTTPClient http;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.setUserAgent("SmartLocker-ESP32");
+  http.setTimeout(15000);
 
-  t_httpUpdate_return r;
-  if (url.startsWith("https://")) r = httpUpdate.update(tls,   url);
-  else                            r = httpUpdate.update(plain, url);
+  bool ok;
+  if (url.startsWith("https://")) ok = http.begin(tls, url);
+  else                            ok = http.begin(plain, url);
+  if (!ok) { if (err) *err = "begin failed"; return false; }
 
-  switch (r) {
-    case HTTP_UPDATE_FAILED:
-      if (err) *err = httpUpdate.getLastErrorString();
-      Serial.printf("[OTA-url] FAILED: %s\n", httpUpdate.getLastErrorString().c_str());
-      return false;
-    case HTTP_UPDATE_NO_UPDATES:
-      if (err) *err = "no update available";
-      return false;
-    case HTTP_UPDATE_OK:
-      return true;
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    if (err) *err = "HTTP " + String(code);
+    Serial.printf("[OTA-url] GET -> %d\n", code);
+    http.end();
+    return false;
   }
-  return false;
+
+  int len = http.getSize();
+  if (len <= 0) {
+    if (err) *err = "no content length";
+    http.end();
+    return false;
+  }
+
+  if (!Update.begin(len)) {
+    if (err) *err = "not enough space";
+    http.end();
+    return false;
+  }
+
+  Serial.printf("[OTA-url] flashing %d bytes\n", len);
+  WiFiClient* stream = http.getStreamPtr();
+  size_t written = Update.writeStream(*stream);
+  http.end();
+
+  if (written != (size_t)len) {
+    if (err) *err = "wrote " + String(written) + "/" + String(len);
+    Update.abort();
+    return false;
+  }
+  if (!Update.end(true)) {
+    if (err) *err = "finalize: " + String(Update.errorString());
+    return false;
+  }
+
+  Serial.println("[OTA-url] OK, rebooting");
+  delay(500);
+  ESP.restart();
+  return true;
 }
 
 void setupOTA() {
