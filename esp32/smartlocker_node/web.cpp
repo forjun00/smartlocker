@@ -218,8 +218,8 @@ static void handleInfo() {
   http.sendContent("");
 }
 
-static void handleApiLock()   { Slot* s = findSlotById(http.arg("id").toInt()); if (s) { int i = s - slots; manualPulse(i); lockedState[i] = true;  driveLed(i); } http.send(200, "application/json", "{\"ok\":true}"); }
-static void handleApiUnlock() { Slot* s = findSlotById(http.arg("id").toInt()); if (s) { int i = s - slots; manualPulse(i); lockedState[i] = false; driveLed(i); } http.send(200, "application/json", "{\"ok\":true}"); }
+static void handleApiLock()   { Slot* s = findSlotById(http.arg("id").toInt()); if (s) { int i = s - slots; lockedState[i] = true;  driveLed(i); } http.send(200, "application/json", "{\"ok\":true}"); }   // occupied: LED off, no relay
+static void handleApiUnlock() { Slot* s = findSlotById(http.arg("id").toInt()); if (s) { int i = s - slots; manualPulse(i); lockedState[i] = false; driveLed(i); } http.send(200, "application/json", "{\"ok\":true}"); }  // release door + LED on
 
 static void handleApiState() {
   String j = "{\"cab\":\"" + cfg.cabId + "\",\"slots\":[";

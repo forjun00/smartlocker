@@ -4,9 +4,9 @@
 
 const uint16_t PULSE_MS          = 1000;
 const bool     RELAY_ACTIVE_HIGH = true;
-// false = LED lights when the GPIO is LOW (cathode-to-pin / active-low wiring).
-// Set true if your LED lights when the pin is HIGH (anode-to-pin via resistor).
-const bool     LED_ACTIVE_HIGH   = false;
+// true = LED lights when GPIO is HIGH (anode-to-pin via resistor). Flip to false
+// if your LED is wired active-low (cathode-to-pin / lights when the pin is LOW).
+const bool     LED_ACTIVE_HIGH   = true;
 
 const int DEFAULT_SLOT_COUNT = 10;
 const int DEFAULT_RELAY_PINS[MAX_SLOTS] = {
@@ -92,10 +92,9 @@ void driveLed(int idx) {
   digitalWrite(slots[idx].ledPin, (LED_ACTIVE_HIGH ? on : !on) ? HIGH : LOW);
 }
 
+// App-driven lock: record occupancy + update the LED only. No relay pulse —
+// locking is physical (door closes, solenoid latches); a pulse would release it.
 void doLock(int idx) {
-  driveRelay(idx, true);
-  delay(PULSE_MS);
-  driveRelay(idx, false);
   lockedState[idx] = true;
   driveLed(idx);                 // parcel in -> LED off
   publishState(idx);
