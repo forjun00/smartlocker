@@ -4,11 +4,21 @@
 
 const uint16_t PULSE_MS          = 1000;
 const bool     RELAY_ACTIVE_HIGH = true;
+// true = LED lights when GPIO is HIGH (anode-to-pin via resistor). Flip to false
+// if your LED is wired active-low (cathode-to-pin / lights when the pin is LOW).
+const bool     LED_ACTIVE_HIGH   = true;
 
 const int DEFAULT_SLOT_COUNT = 10;
 const int DEFAULT_RELAY_PINS[MAX_SLOTS] = {
   25, 26, 27, 14, 13, 32, 33, 23, 22, 21,
   19, 18,  5,  4, 16, 17     // tail slots for expansion (slots 11..16)
+};
+// LEDs off by default: the relay defaults already use every "safe" GPIO, so
+// there are no free pins to assign automatically. Set each slot's LED GPIO on
+// the PINS page (use an I/O expander if you run out of pins). -1 = no LED.
+const int DEFAULT_LED_PINS[MAX_SLOTS] = {
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1
 };
 
 int  slotCount = DEFAULT_SLOT_COUNT;
@@ -26,8 +36,10 @@ void loadSlotMapping() {
   if (slotCount > MAX_SLOTS) slotCount = MAX_SLOTS;
   for (int i = 0; i < MAX_SLOTS; i++) {
     char rk[6]; snprintf(rk, sizeof(rk), "p%d", i);
+    char lk[6]; snprintf(lk, sizeof(lk), "l%d", i);
     int relay = prefs.getInt(rk, DEFAULT_RELAY_PINS[i]);
-    slots[i] = { i + 1, relay, -1 };           // no door sensor
+    int led   = prefs.getInt(lk, DEFAULT_LED_PINS[i]);
+    slots[i] = { i + 1, relay, -1, led };      // no door sensor
   }
   prefs.end();
 }
@@ -37,7 +49,9 @@ void saveSlotMapping() {
   prefs.putInt("count", slotCount);
   for (int i = 0; i < MAX_SLOTS; i++) {
     char rk[6]; snprintf(rk, sizeof(rk), "p%d", i);
+    char lk[6]; snprintf(lk, sizeof(lk), "l%d", i);
     prefs.putInt(rk, slots[i].relayPin);
+    prefs.putInt(lk, slots[i].ledPin);
   }
   prefs.end();
 }
@@ -48,6 +62,10 @@ void initSlots() {
     pinMode(slots[i].relayPin, OUTPUT);
     driveRelay(i, false);
     lockedState[i] = false;
+    if (slots[i].ledPin >= 0) {
+      pinMode(slots[i].ledPin, OUTPUT);
+      driveLed(i);                 // empty at boot -> LED on
+    }
     if (slots[i].doorPin >= 0) {
       pinMode(slots[i].doorPin, INPUT_PULLUP);
       doorClosed[i] = digitalRead(slots[i].doorPin) == LOW;
@@ -67,11 +85,18 @@ void driveRelay(int idx, bool on) {
   digitalWrite(slots[idx].relayPin, (RELAY_ACTIVE_HIGH ? on : !on) ? HIGH : LOW);
 }
 
+// LED on when the slot is empty (unlocked), off when a parcel is locked in.
+void driveLed(int idx) {
+  if (slots[idx].ledPin < 0) return;
+  bool on = !lockedState[idx];
+  digitalWrite(slots[idx].ledPin, (LED_ACTIVE_HIGH ? on : !on) ? HIGH : LOW);
+}
+
+// App-driven lock: record occupancy + update the LED only. No relay pulse —
+// locking is physical (door closes, solenoid latches); a pulse would release it.
 void doLock(int idx) {
-  driveRelay(idx, true);
-  delay(PULSE_MS);
-  driveRelay(idx, false);
   lockedState[idx] = true;
+  driveLed(idx);                 // parcel in -> LED off
   publishState(idx);
 }
 
@@ -80,6 +105,7 @@ void doUnlock(int idx) {
   delay(PULSE_MS);
   driveRelay(idx, false);
   lockedState[idx] = false;
+  driveLed(idx);                 // empty -> LED on
   publishState(idx);
 }
 

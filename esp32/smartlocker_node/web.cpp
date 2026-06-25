@@ -81,9 +81,13 @@ static void handleRoot() {
     c += "<div style='display:flex;align-items:center;gap:10px'>";
     c += "<div class='bullet mint' data-bullet>" + id2 + "</div>";
     c += "<div><div style='font-weight:700;font-size:15px'>Slot " + id2 + "</div>";
-    c += "<div class='muted' style='font-size:11px'>relay GPIO " + String(slots[i].relayPin) + "</div></div></div>";
+    String pinLine = "relay GPIO " + String(slots[i].relayPin);
+    if (slots[i].ledPin >= 0) pinLine += " &middot; LED GPIO " + String(slots[i].ledPin);
+    c += "<div class='muted' style='font-size:11px'>" + pinLine + "</div></div></div>";
     c += "<div class='pill mint' data-pill>OPEN</div></div>";
     c += "<div class='kv'><span>Digital output</span><span><span class='dot off' data-dot></span><span data-relay>OFF</span></span></div>";
+    if (slots[i].ledPin >= 0)
+      c += "<div class='kv'><span>LED</span><span><span class='dot on' data-leddot></span><span data-led>ON</span></span></div>";
     c += "<div class='grid'>";
     c += "<button type='button' data-act='lock' data-id='" + id + "'>Lock</button>";
     c += "<button class='primary' type='button' data-act='unlock' data-id='" + id + "'>Unlock</button>";
@@ -100,11 +104,13 @@ static void handleRoot() {
       "document.getElementById('liveTag').textContent='Live \\u00b7 cabinet '+d.cab;"
       "for(const s of d.slots){const el=document.getElementById('slot'+s.id);if(!el)continue;"
       "const pill=el.querySelector('[data-pill]'),bul=el.querySelector('[data-bullet]'),"
-      "dot=el.querySelector('[data-dot]'),rel=el.querySelector('[data-relay]');"
+      "dot=el.querySelector('[data-dot]'),rel=el.querySelector('[data-relay]'),"
+      "led=el.querySelector('[data-led]'),leddot=el.querySelector('[data-leddot]');"
       "const cls=s.locked?'rose':'mint';"
       "pill.className='pill '+cls;pill.textContent=s.locked?'LOCKED':'OPEN';"
       "bul.className='bullet '+cls;"
-      "dot.className='dot '+(s.relay?'on':'off');rel.textContent=s.relay?'ON':'OFF';}"
+      "dot.className='dot '+(s.relay?'on':'off');rel.textContent=s.relay?'ON':'OFF';"
+      "if(led){const lon=s.led==='on';leddot.className='dot '+(lon?'on':'off');led.textContent=lon?'ON':'OFF';}}"
       "}catch(e){fails++;if(fails>3)document.getElementById('liveTag').textContent='Offline \\u2014 reconnecting\\u2026';}"
     "}"
     "async function act(ev){const b=ev.target.closest('button[data-act]');if(!b)return;"
@@ -212,8 +218,8 @@ static void handleInfo() {
   http.sendContent("");
 }
 
-static void handleApiLock()   { Slot* s = findSlotById(http.arg("id").toInt()); if (s) manualPulse(s - slots); http.send(200, "application/json", "{\"ok\":true}"); }
-static void handleApiUnlock() { Slot* s = findSlotById(http.arg("id").toInt()); if (s) manualPulse(s - slots); http.send(200, "application/json", "{\"ok\":true}"); }
+static void handleApiLock()   { Slot* s = findSlotById(http.arg("id").toInt()); if (s) { int i = s - slots; lockedState[i] = true;  driveLed(i); } http.send(200, "application/json", "{\"ok\":true}"); }   // occupied: LED off, no relay
+static void handleApiUnlock() { Slot* s = findSlotById(http.arg("id").toInt()); if (s) { int i = s - slots; manualPulse(i); lockedState[i] = false; driveLed(i); } http.send(200, "application/json", "{\"ok\":true}"); }  // release door + LED on
 
 static void handleApiState() {
   String j = "{\"cab\":\"" + cfg.cabId + "\",\"slots\":[";
@@ -222,6 +228,7 @@ static void handleApiState() {
     j += "{\"id\":" + String(slots[i].id) +
          ",\"relay\":" + (relayOn[i] ? "true" : "false") +
          ",\"locked\":" + (lockedState[i] ? "true" : "false") +
+         ",\"led\":\"" + String(slots[i].ledPin < 0 ? "na" : (lockedState[i] ? "off" : "on")) + "\"" +
          ",\"door\":\"" + String(slots[i].doorPin < 0 ? "na" : (doorClosed[i] ? "closed" : "ajar")) + "\"}";
   }
   j += "]}";
@@ -233,17 +240,22 @@ static void handlePins() {
   http.send(200, "text/html", "");
   http.sendContent_P(PAGE_HEAD);
   sendNav("pins");
-  http.sendContent("<h1>Pin mapping</h1><p class='muted'>Set how many slots this cabinet has and which GPIO drives each relay. Saved to flash. Reboots after save.</p>");
+  http.sendContent("<h1>Pin mapping</h1><p class='muted'>Set how many slots this cabinet has and which GPIO drives each relay and (optionally) its LED. Saved to flash. Reboots after save.</p>");
   http.sendContent("<form method='post' action='/pins/save' class='card'>");
   String s;
   s += "<label>SLOT COUNT (1&ndash;" + String(MAX_SLOTS) + ")</label>";
   s += "<input name='count' type='number' min='1' max='" + String(MAX_SLOTS) + "' value='" + String(slotCount) + "'>";
-  s += "<div style='font-size:11px;color:#6E6880;margin-top:8px;line-height:1.5'>Safe GPIOs: 4, 5, 13, 14, 16&ndash;19, 21&ndash;23, 25&ndash;27, 32, 33. Avoid 0, 2, 6&ndash;11, 12, 15, 34&ndash;39.</div>";
+  s += "<div style='font-size:11px;color:#6E6880;margin-top:8px;line-height:1.5'>Safe GPIOs: 4, 5, 13, 14, 16&ndash;19, 21&ndash;23, 25&ndash;27, 32, 33. Avoid 0, 2, 6&ndash;11, 12, 15, 34&ndash;39. LED &minus;1 = no LED. LED is ON when the slot is empty, OFF when a parcel is inside.</div>";
   s += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px'>";
   for (int i = 0; i < MAX_SLOTS; i++) {
     String id2 = i + 1 < 10 ? ("0" + String(i + 1)) : String(i + 1);
-    s += "<div><label style='margin:0 0 4px'>SLOT " + id2 + "</label>";
-    s += "<input name='p" + String(i) + "' type='number' min='0' max='39' value='" + String(slots[i].relayPin) + "'></div>";
+    s += "<div style='border:1px solid var(--border);border-radius:12px;padding:8px'>";
+    s += "<div style='font-family:\"Space Mono\",monospace;font-size:11px;font-weight:700;letter-spacing:.1em'>SLOT " + id2 + "</div>";
+    s += "<label style='margin:6px 0 4px'>RELAY GPIO</label>";
+    s += "<input name='p" + String(i) + "' type='number' min='0' max='39' value='" + String(slots[i].relayPin) + "'>";
+    s += "<label style='margin:8px 0 4px'>LED GPIO (&minus;1 = none)</label>";
+    s += "<input name='l" + String(i) + "' type='number' min='-1' max='39' value='" + String(slots[i].ledPin) + "'>";
+    s += "</div>";
   }
   s += "</div>";
   s += "<div style='height:14px'></div><button class='primary' type='submit' style='width:100%'>Save &amp; reboot</button>";
@@ -267,6 +279,13 @@ static void handlePinsSave() {
       if (p < 0)  p = 0;
       if (p > 39) p = 39;
       slots[i].relayPin = p;
+    }
+    String lk = "l" + String(i);
+    if (http.hasArg(lk)) {
+      int p = http.arg(lk).toInt();
+      if (p < -1) p = -1;     // -1 = no LED
+      if (p > 39) p = 39;
+      slots[i].ledPin = p;
     }
   }
   saveSlotMapping();
