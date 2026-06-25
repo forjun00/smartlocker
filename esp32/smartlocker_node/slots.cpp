@@ -4,7 +4,9 @@
 
 const uint16_t PULSE_MS          = 1000;
 const bool     RELAY_ACTIVE_HIGH = true;
-const bool     LED_ACTIVE_HIGH   = true;
+// false = LED lights when the GPIO is LOW (cathode-to-pin / active-low wiring).
+// Set true if your LED lights when the pin is HIGH (anode-to-pin via resistor).
+const bool     LED_ACTIVE_HIGH   = false;
 
 const int DEFAULT_SLOT_COUNT = 10;
 const int DEFAULT_RELAY_PINS[MAX_SLOTS] = {
