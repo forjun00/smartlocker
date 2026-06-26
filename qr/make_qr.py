@@ -3,18 +3,24 @@
 Generate printable QR code PNGs for locker slots.
 
 Each QR encodes  <base>/locker/<id>  so scanning it opens that slot's page.
+For the hash-routed deploy the base ends with ".../index.html#", giving e.g.
+  https://app.mdbiot.com/smartlocker/index.html#/locker/1
+
+Requires:  pip install qrcode pillow
 
 Usage:
-    python make_qr.py 1                      # slot 1, default base URL
-    python make_qr.py 1 2 3                   # several slots
-    python make_qr.py all                     # slots 1..10
-    python make_qr.py 1 --base http://192.168.1.50:3001
+    python make_qr.py all                     # slots 1..10, default base
+    python make_qr.py 1 2 3                    # specific slots
+    python make_qr.py all --base "http://172.16.110.115:3001"   # LAN/Flask (clean URLs)
+    python make_qr.py 1 --base "https://app.mdbiot.com/smartlocker/index.html#"
 """
 import argparse, os
 import qrcode
 from PIL import Image, ImageDraw, ImageFont
 
-DEFAULT_BASE = "http://172.16.110.115:3001"
+# Hash-routed subfolder deploy. For the Flask/clean-URL setup use e.g.
+# "http://172.16.110.115:3001" instead (no "/index.html#").
+DEFAULT_BASE = "https://app.mdbiot.com/smartlocker/index.html#"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
