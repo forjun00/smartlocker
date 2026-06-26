@@ -4,6 +4,16 @@ __pycache__/
 backend/lockers.json
 .env
 
+# Runtime data (regenerated at startup)
+backend/events.json
+backend/settings.json
+backend/sms_outbox.txt
+php/data/*.json
+
+# PHP edition: built frontend copied in from frontend/dist (build output)
+php/index.html
+php/assets/
+
 # Node
 node_modules/
 frontend/dist/
