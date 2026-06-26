@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { useLang } from '../i18n'
+import { api } from '../api'
 
 function copyText(text) {
   if (navigator.clipboard) {
@@ -28,7 +29,8 @@ export default function AdminPage({ token, onLogout }) {
   const navigate = useNavigate()
   const { t } = useLang()
   const [lockers, setLockers] = useState([])
-  const [baseUrl, setBaseUrl] = useState(window.location.origin)
+  // Hash-routed, base-path-aware public URL for QR codes + unlock links
+  const [baseUrl, setBaseUrl] = useState(`${window.location.origin}${import.meta.env.BASE_URL}index.html#`)
   const [resetMsg, setResetMsg] = useState({})
   const [unlockLinks, setUnlockLinks] = useState({})
   const [generatingLink, setGeneratingLink] = useState({})
@@ -42,15 +44,15 @@ export default function AdminPage({ token, onLogout }) {
   const authHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
   const guard = (res) => { if (res.status === 401) onLogout(); return res }
 
-  const refresh = () => fetch('/api/lockers').then(r => r.json()).then(setLockers)
-  const refreshLog = () => fetch('/api/log', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : []).then(setLog)
-  const refreshSettings = () => fetch('/api/admin/settings', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : null).then(s => { if (s) setSmsEnabled(!!s.sms_enabled) })
+  const refresh = () => api('lockers').then(r => r.json()).then(setLockers)
+  const refreshLog = () => api('log', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : []).then(setLog)
+  const refreshSettings = () => api('admin/settings', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : null).then(s => { if (s) setSmsEnabled(!!s.sms_enabled) })
 
   const toggleSms = async () => {
     const next = !smsEnabled
     setSmsEnabled(next)          // optimistic
     setSmsBusy(true)
-    const res = guard(await fetch('/api/admin/settings', { method: 'POST', headers: authHeaders, body: JSON.stringify({ sms_enabled: next }) }))
+    const res = guard(await api('admin/settings', { method: 'POST', headers: authHeaders, body: JSON.stringify({ sms_enabled: next }) }))
     setSmsBusy(false)
     if (res.ok) { const s = await res.json(); setSmsEnabled(!!s.sms_enabled) }
     else setSmsEnabled(!next)    // revert on failure
@@ -61,14 +63,14 @@ export default function AdminPage({ token, onLogout }) {
 
   const generateLink = async (id) => {
     setGeneratingLink(g => ({ ...g, [id]: true }))
-    const res = guard(await fetch(`/api/locker/${id}/generate-token`, { method: 'POST', headers: authHeaders }))
+    const res = guard(await api(`locker/${id}/generate-token`, { method: 'POST', headers: authHeaders }))
     const data = await res.json()
     setGeneratingLink(g => ({ ...g, [id]: false }))
     if (res.ok) setUnlockLinks(l => ({ ...l, [id]: `${baseUrl}/pickup/${data.token}` }))
   }
 
   const handleReset = async (id) => {
-    const res = guard(await fetch(`/api/locker/${id}/reset`, { method: 'POST', headers: authHeaders }))
+    const res = guard(await api(`locker/${id}/reset`, { method: 'POST', headers: authHeaders }))
     const data = await res.json()
     setResetMsg({ [id]: res.ok ? t('ad.reset.ok') : data.error })
     refresh(); refreshLog()

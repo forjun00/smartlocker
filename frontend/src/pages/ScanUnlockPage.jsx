@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Html5Qrcode } from 'html5-qrcode'
 import LockIcon from '../components/LockIcon'
+import { api } from '../api'
 
 const MINT_BG = 'oklch(0.93 0.05 165)', MINT_FG = 'oklch(0.42 0.09 165)'
 const ROSE_BG = 'oklch(0.93 0.05 30)',  ROSE_FG = 'oklch(0.45 0.11 30)'
@@ -51,7 +52,7 @@ export default function ScanUnlockPage() {
 
     setPhase('unlocking')
     try {
-      const res = await fetch(`/api/pickup/${token}`)
+      const res = await api(`pickup/${token}`)
       const data = await res.json()
       if (res.ok) setPhase('success')
       else { setPhase('error'); setMsg(data.error || 'Unlock failed.') }

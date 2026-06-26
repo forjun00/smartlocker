@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import LockIcon from '../components/LockIcon'
 import { useLang } from '../i18n'
+import { api } from '../api'
 
 const MINT_BG = 'oklch(0.93 0.05 165)', MINT_FG = 'oklch(0.42 0.09 165)'
 const ROSE_BG = 'oklch(0.93 0.05 30)',  ROSE_FG = 'oklch(0.45 0.11 30)'
@@ -23,7 +24,7 @@ export default function LockerPage() {
   const [doorOpened, setDoorOpened] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/locker/${id}`)
+    api(`locker/${id}`)
       .then(r => r.json())
       .then(d => setStatus(d.locked ? STATES.LOCKED : STATES.UNLOCKED))
       .catch(() => { setStatus(STATES.ERROR); setMsg(t('lk.err.server')) })
@@ -34,7 +35,7 @@ export default function LockerPage() {
 
   const handleOpenDoor = async () => {
     setBusy(true); clearMsg()
-    const res = await fetch(`/api/locker/${id}/open`, { method: 'POST' })
+    const res = await api(`locker/${id}/open`, { method: 'POST' })
     const data = await res.json()
     setBusy(false)
     if (res.ok) { setDoorOpened(true); setMsg(t('lk.door.released')); setMsgError(false) }
@@ -47,7 +48,7 @@ export default function LockerPage() {
     // Full-screen loader until the gateway confirms (backend waits for 202 Accepted)
     setSending(true); clearMsg()
     try {
-      const res = await fetch(`/api/locker/${id}/lock`, {
+      const res = await api(`locker/${id}/lock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, base_url: window.location.origin }),
@@ -66,7 +67,7 @@ export default function LockerPage() {
     const digits = phone.replace(/\D/g, '')
     if (digits.length !== 10) return setError(t('lk.err.phonedrop'))
     setBusy(true); clearMsg()
-    const res = await fetch(`/api/locker/${id}/unlock`, {
+    const res = await api(`locker/${id}/unlock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone }),
@@ -79,7 +80,7 @@ export default function LockerPage() {
 
   const handleDone = () => {
     setPhase('idle'); setPhone(''); setSentPhone(''); clearMsg()
-    fetch(`/api/locker/${id}`).then(r => r.json()).then(d => setStatus(d.locked ? STATES.LOCKED : STATES.UNLOCKED))
+    api(`locker/${id}`).then(r => r.json()).then(d => setStatus(d.locked ? STATES.LOCKED : STATES.UNLOCKED))
   }
 
   // Derived display values

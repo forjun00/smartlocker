@@ -26,9 +26,9 @@ const ASEFA_URL      = 'https://innovations.asefa.co.th/cdn/sms/';
 const MQTT_HOST      = 'mqtt.mdbiot.com';
 const MQTT_PORT      = 1883;
 
-// Base URL used inside the SMS pickup link. Blank = derive from the request host
-// (recommended for XAMPP: the link then matches however the page was opened).
-const PUBLIC_BASE_URL = '';
+// Base URL used inside the SMS pickup link. For a hash-routed subfolder deploy
+// it must point at the real index.html + '#'. Blank = derive scheme+host only.
+const PUBLIC_BASE_URL = 'https://app.mdbiot.com/smartlocker/index.html#';
 
 // ---------------------------------------------------------------------------
 // Boot
@@ -205,9 +205,16 @@ function mqtt_pub($slot_id, $cmd) {
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
-$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$pos = strpos($uri, '/api/');
-$route = $pos !== false ? substr($uri, $pos + 5) : '';
+// Route resolution. Two modes:
+//   1) ?p=locker/1/lock   -> hosts WITHOUT URL rewriting (nginx/FTP, no .htaccess)
+//   2) /api/locker/1/lock -> clean URLs when a rewrite/.htaccess routes here
+if (isset($_GET['p'])) {
+    $route = $_GET['p'];
+} else {
+    $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    $pos = strpos($uri, '/api/');
+    $route = $pos !== false ? substr($uri, $pos + 5) : '';
+}
 $parts = array_values(array_filter(explode('/', trim($route, '/')), fn($p) => $p !== ''));
 $method = $_SERVER['REQUEST_METHOD'];
 $body = json_decode(file_get_contents('php://input'), true) ?: [];

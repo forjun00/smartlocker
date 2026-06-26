@@ -2,6 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  // Subfolder deploys set the base, e.g. VITE_BASE=/smartlocker/ npm run build
+  base: process.env.VITE_BASE || '/',
+  // Inject the API base at build time (PHP no-rewrite hosts use api.php?p=)
+  define: {
+    'import.meta.env.VITE_API_BASE': JSON.stringify(process.env.VITE_API_BASE || ''),
+  },
   plugins: [react()],
   server: {
     host: true,

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import LockIcon from '../components/LockIcon'
 import { useLang } from '../i18n'
+import { api } from '../api'
 
 export default function LoginPage({ onLogin }) {
   const { t } = useLang()
@@ -12,7 +13,7 @@ export default function LoginPage({ onLogin }) {
   const handleLogin = async () => {
     if (!pw) return setError(t('lg.err.enter'))
     setBusy(true); setError('')
-    const res = await fetch('/api/admin/login', {
+    const res = await api('admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw }),

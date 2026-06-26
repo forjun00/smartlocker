@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import LockIcon from '../components/LockIcon'
 import { useLang } from '../i18n'
+import { api } from '../api'
 
 const MINT_BG = 'oklch(0.93 0.05 165)', MINT_FG = 'oklch(0.42 0.09 165)'
 const ROSE_BG = 'oklch(0.93 0.05 30)',  ROSE_FG = 'oklch(0.45 0.11 30)'
@@ -16,7 +17,7 @@ export default function PickupPage() {
   const handleUnlock = async () => {
     setPhase('unlocking')
     try {
-      const res = await fetch(`/api/pickup/${token}`)
+      const res = await api(`pickup/${token}`)
       const data = await res.json()
       if (res.ok) { setPhase('success'); setLockerId(data.locker_id) }
       else { setPhase('error'); setErrorMsg(data.error || t('pk.err.invalid')) }
