@@ -1,3 +1,5 @@
 flask
 flask-cors
 bcrypt
+paho-mqtt
+requests

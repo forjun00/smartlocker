@@ -7,13 +7,16 @@ import os
 import uuid
 import time
 import datetime
+import re
 import paho.mqtt.client as mqtt
+from sms import send_sms
 
 app = Flask(__name__, static_folder='../frontend/dist', static_url_path='')
 CORS(app)
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), 'lockers.json')
 LOG_FILE = os.path.join(os.path.dirname(__file__), 'events.json')
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
 NUM_LOCKERS = 10
 
 
@@ -33,9 +36,42 @@ def save_lockers(lockers):
 
 lockers = load_lockers()
 
+
+# ---------------------------------------------------------------------------
+# Runtime settings (toggled live from the admin page)
+# ---------------------------------------------------------------------------
+DEFAULT_SETTINGS = {'sms_enabled': True}
+
+
+def load_settings():
+    s = dict(DEFAULT_SETTINGS)
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                s.update(json.load(f))
+        except Exception:
+            pass
+    return s
+
+
+def save_settings(s):
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(s, f, indent=2)
+    except Exception as e:
+        print(f'[SETTINGS] write failed: {e}')
+
+
+settings = load_settings()
+
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin1234')
 
-MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
+# Base URL used to build the SMS pickup link. Forced to the LAN IP so the link
+# is reachable from the recipient's phone, no matter how the courier opened the
+# page (localhost/127.0.0.1 links would be dead on a phone). Override via env.
+PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://172.16.110.115:3001')
+
+MQTT_HOST = os.environ.get('MQTT_HOST', 'mqtt.mdbiot.com')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', 1883))
 CAB_ID    = os.environ.get('CAB_ID', 'cab1')
 
@@ -116,6 +152,11 @@ pickup_tokens = {}
 TOKEN_TTL = 8 * 3600
 
 
+def mask_phone(phone):
+    digits = re.sub(r'\D', '', phone)
+    return ('•' * max(0, len(digits) - 4)) + digits[-4:] if digits else phone
+
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -127,6 +168,23 @@ def admin_login():
     token = uuid.uuid4().hex
     admin_tokens[token] = time.time() + SESSION_TTL
     return jsonify({'success': True, 'token': token})
+
+
+@app.get('/api/admin/settings')
+@require_admin
+def get_settings():
+    return jsonify(settings)
+
+
+@app.post('/api/admin/settings')
+@require_admin
+def update_settings():
+    data = request.json or {}
+    if 'sms_enabled' in data:
+        settings['sms_enabled'] = bool(data['sms_enabled'])
+    save_settings(settings)
+    log_event('-', 'settings', 'sms ' + ('on' if settings['sms_enabled'] else 'off'))
+    return jsonify(settings)
 
 
 # ---------------------------------------------------------------------------
@@ -154,15 +212,28 @@ def lock_locker(id):
     if lockers[id]['locked']:
         return jsonify({'error': 'Already locked'}), 400
 
-    password = request.json.get('password', '')
-    if len(password) < 4:
-        return jsonify({'error': 'Password must be at least 4 characters'}), 400
+    phone = (request.json.get('phone') or '').strip()
+    base_url = (PUBLIC_BASE_URL or request.json.get('base_url') or request.host_url.rstrip('/'))
+    digits = re.sub(r'\D', '', phone)
+    if len(digits) != 10:
+        return jsonify({'error': 'Enter a 10-digit phone number'}), 400
 
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    lockers[id] = {'locked': True, 'password_hash': hashed}
+    # lock the slot and create a one-time pickup link
+    token = uuid.uuid4().hex
+    pickup_tokens[token] = {'locker_id': id, 'expires_at': time.time() + TOKEN_TTL}
+    lockers[id] = {'locked': True, 'password_hash': None, 'phone': digits}
     save_lockers(lockers)
-    log_event(id, 'lock', 'passcode')
-    return jsonify({'success': True})
+    mqtt_pub(id, 'lock')   # tell the cabinet the slot is occupied -> LED off
+
+    link = f'{base_url}/pickup/{token}'
+    body = f'SmartLocker: your parcel is in slot {id}. Tap to open (valid 8 hour): {link}'
+
+    sms_on = settings.get('sms_enabled', True)
+    sent = send_sms(phone, body) if sms_on else False
+
+    log_event(id, 'lock', 'sms' if sms_on else 'no-sms', ok=sent)
+    return jsonify({'success': True, 'sms_sent': sent, 'sms_enabled': sms_on,
+                    'phone': mask_phone(phone)})
 
 
 @app.post('/api/locker/<id>/open')
@@ -183,17 +254,22 @@ def unlock_locker(id):
     if not lockers[id]['locked']:
         return jsonify({'error': 'Not locked'}), 400
 
-    password = request.json.get('password', '')
-    stored_hash = lockers[id]['password_hash'].encode()
+    phone = (request.json.get('phone') or '').strip()
+    digits = re.sub(r'\D', '', phone)
+    stored = lockers[id].get('phone')
 
-    if not bcrypt.checkpw(password.encode(), stored_hash):
-        log_event(id, 'unlock', 'passcode', ok=False)
-        return jsonify({'error': 'Wrong password'}), 401
+    if not stored:
+        return jsonify({'error': 'This slot has no phone on file — use the SMS link'}), 400
+
+    # match on the full digit string or the last 9 significant digits (handles +66 vs 0)
+    if not (digits == stored or (len(digits) >= 9 and digits[-9:] == stored[-9:])):
+        log_event(id, 'unlock', 'phone', ok=False)
+        return jsonify({'error': 'Phone number does not match'}), 401
 
     lockers[id] = {'locked': False, 'password_hash': None}
     save_lockers(lockers)
     mqtt_pub(id, 'unlock')
-    log_event(id, 'unlock', 'passcode')
+    log_event(id, 'unlock', 'phone')
     return jsonify({'success': True})
 
 
