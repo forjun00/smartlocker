@@ -1,0 +1,15 @@
+RewriteEngine On
+
+# Pass the Authorization header through to PHP (needed for admin Bearer tokens)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# API requests -> api.php
+RewriteRule ^api/ api.php [L,QSA]
+
+# Serve real files (built frontend assets, index.html) directly
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# SPA fallback: any other path -> index.html (React Router handles it)
+RewriteRule ^ index.html [L]
