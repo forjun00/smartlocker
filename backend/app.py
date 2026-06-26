@@ -213,20 +213,16 @@ def lock_locker(id):
         return jsonify({'error': 'Already locked'}), 400
 
     phone = (request.json.get('phone') or '').strip()
-    base_url = (PUBLIC_BASE_URL or request.json.get('base_url') or request.host_url.rstrip('/'))
     digits = re.sub(r'\D', '', phone)
     if len(digits) != 10:
         return jsonify({'error': 'Enter a 10-digit phone number'}), 400
 
-    # lock the slot and create a one-time pickup link
-    token = uuid.uuid4().hex
-    pickup_tokens[token] = {'locker_id': id, 'expires_at': time.time() + TOKEN_TTL}
+    # lock the slot (no SMS link — recipient opens at the locker with their phone)
     lockers[id] = {'locked': True, 'password_hash': None, 'phone': digits}
     save_lockers(lockers)
     mqtt_pub(id, 'lock')   # tell the cabinet the slot is occupied -> LED off
 
-    link = f'{base_url}/pickup/{token}'
-    body = f'SmartLocker: มีพัสดุอยู่ในช่อง {id} แตะลิงก์เพื่อเปิด (ใช้ได้ 8 ชั่วโมง): {link}'
+    body = f'SmartLocker: มีพัสดุอยู่ในช่อง {id} สแกน QR ที่ตู้แล้วใส่เบอร์โทรนี้เพื่อเปิด'
 
     sms_on = settings.get('sms_enabled', True)
     sent = send_sms(phone, body) if sms_on else False

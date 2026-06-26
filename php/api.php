@@ -306,18 +306,12 @@ if (count($parts) >= 2 && $parts[0] === 'locker') {
         $d = digits_only($phone);
         if (strlen($d) !== 10) send_json(['error' => 'Enter a 10-digit phone number'], 400);
 
-        $token = uuid_hex();
-        $pk = load_json('pickup.json', []);
-        $pk[$token] = ['locker_id' => $id, 'expires_at' => time() + TOKEN_TTL];
-        save_json('pickup.json', $pk);
-
         $lk[$id] = ['locked' => true, 'phone' => $d];
         save_lockers($lk);
         mqtt_pub($id, 'lock');   // cabinet: slot occupied -> LED off
 
-        $base = base_url_from_request();
-        $link = "$base/pickup/$token";
-        $msg  = "SmartLocker: มีพัสดุอยู่ในช่อง $id แตะลิงก์เพื่อเปิด (ใช้ได้ 8 ชั่วโมง): $link";
+        // No link in the SMS — the recipient opens at the locker with their phone.
+        $msg = "SmartLocker: มีพัสดุอยู่ในช่อง $id สแกน QR ที่ตู้แล้วใส่เบอร์โทรนี้เพื่อเปิด";
 
         $s = load_settings();
         $sms_on = $s['sms_enabled'];
