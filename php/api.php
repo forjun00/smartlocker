@@ -317,7 +317,7 @@ if (count($parts) >= 2 && $parts[0] === 'locker') {
 
         $base = base_url_from_request();
         $link = "$base/pickup/$token";
-        $msg  = "SmartLocker: your parcel is in slot $id. Tap to open (valid 8 hour): $link";
+        $msg  = "SmartLocker: มีพัสดุอยู่ในช่อง $id แตะลิงก์เพื่อเปิด (ใช้ได้ 8 ชั่วโมง): $link";
 
         $s = load_settings();
         $sms_on = $s['sms_enabled'];

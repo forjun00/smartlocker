@@ -226,7 +226,7 @@ def lock_locker(id):
     mqtt_pub(id, 'lock')   # tell the cabinet the slot is occupied -> LED off
 
     link = f'{base_url}/pickup/{token}'
-    body = f'SmartLocker: your parcel is in slot {id}. Tap to open (valid 8 hour): {link}'
+    body = f'SmartLocker: มีพัสดุอยู่ในช่อง {id} แตะลิงก์เพื่อเปิด (ใช้ได้ 8 ชั่วโมง): {link}'
 
     sms_on = settings.get('sms_enabled', True)
     sent = send_sms(phone, body) if sms_on else False
