@@ -8,7 +8,7 @@ void loadConfig() {
   prefs.begin("locker", true);
   cfg.wifiSsid   = prefs.getString("ssid",    "");
   cfg.wifiPass   = prefs.getString("pass",    "");
-  cfg.mqttHost   = prefs.getString("mhost",   "");
+  cfg.mqttHost   = prefs.getString("mhost",   "mqtt.mdbiot.com");
   cfg.mqttPort   = prefs.getUShort("mport",   1883);
   cfg.mqttUser   = prefs.getString("muser",   "");
   cfg.mqttPass   = prefs.getString("mpass",   "");
