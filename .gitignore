@@ -9,6 +9,7 @@ backend/events.json
 backend/settings.json
 backend/sms_outbox.txt
 php/data/*.json
+php/data/*.php
 
 # PHP edition: built frontend copied in from frontend/dist (build output)
 php/index.html

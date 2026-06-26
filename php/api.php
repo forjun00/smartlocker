@@ -42,19 +42,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 $DATA = __DIR__ . '/data';
 if (!is_dir($DATA)) @mkdir($DATA, 0777, true);
 
-function data_path($name) { global $DATA; return $DATA . '/' . $name; }
+// Data is stored as *.php files with a PHP guard on the first line, so if anyone
+// requests them over the web (where .htaccess is ignored, e.g. nginx) PHP runs
+// the guard and returns 403 instead of leaking phone numbers / tokens.
+// A closing PHP tag keeps the JSON below as inert text (not parsed), so a direct
+// web hit just runs exit then 403 with no body. api.php strips this first line.
+const DATA_GUARD = "<?php http_response_code(403); exit; ?>\n";
+
+function data_path($name) { global $DATA; return $DATA . '/' . $name . '.php'; }
 
 function load_json($name, $default) {
     $p = data_path($name);
     if (!file_exists($p)) return $default;
     $raw = file_get_contents($p);
-    $val = json_decode($raw, true);
+    $nl = strpos($raw, "\n");                 // strip the guard line
+    $json = $nl !== false ? substr($raw, $nl + 1) : '';
+    $val = json_decode($json, true);
     return $val === null ? $default : $val;
 }
 
 function save_json($name, $data) {
     $p = data_path($name);
-    file_put_contents($p, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+    $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    file_put_contents($p, DATA_GUARD . $json, LOCK_EX);
 }
 
 function send_json($data, $code = 200) {
