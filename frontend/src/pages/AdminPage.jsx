@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
+import { useLang } from '../i18n'
 
 function copyText(text) {
   if (navigator.clipboard) {
@@ -25,6 +26,7 @@ function pad(n) { return String(n).padStart(2, '0') }
 
 export default function AdminPage({ token, onLogout }) {
   const navigate = useNavigate()
+  const { t } = useLang()
   const [lockers, setLockers] = useState([])
   const [baseUrl, setBaseUrl] = useState(window.location.origin)
   const [resetMsg, setResetMsg] = useState({})
@@ -34,13 +36,27 @@ export default function AdminPage({ token, onLogout }) {
   const [expanded, setExpanded] = useState(null)
   const [log, setLog] = useState([])
   const [showLog, setShowLog] = useState(false)
+  const [smsEnabled, setSmsEnabled] = useState(true)
+  const [smsBusy, setSmsBusy] = useState(false)
 
   const authHeaders = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
   const guard = (res) => { if (res.status === 401) onLogout(); return res }
 
   const refresh = () => fetch('/api/lockers').then(r => r.json()).then(setLockers)
   const refreshLog = () => fetch('/api/log', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : []).then(setLog)
-  useEffect(() => { refresh(); refreshLog() }, [])
+  const refreshSettings = () => fetch('/api/admin/settings', { headers: authHeaders }).then(guard).then(r => r.ok ? r.json() : null).then(s => { if (s) setSmsEnabled(!!s.sms_enabled) })
+
+  const toggleSms = async () => {
+    const next = !smsEnabled
+    setSmsEnabled(next)          // optimistic
+    setSmsBusy(true)
+    const res = guard(await fetch('/api/admin/settings', { method: 'POST', headers: authHeaders, body: JSON.stringify({ sms_enabled: next }) }))
+    setSmsBusy(false)
+    if (res.ok) { const s = await res.json(); setSmsEnabled(!!s.sms_enabled) }
+    else setSmsEnabled(!next)    // revert on failure
+  }
+
+  useEffect(() => { refresh(); refreshLog(); refreshSettings() }, [])
   useEffect(() => { const t = setInterval(refresh, 4000); return () => clearInterval(t) }, [])
 
   const generateLink = async (id) => {
@@ -54,7 +70,7 @@ export default function AdminPage({ token, onLogout }) {
   const handleReset = async (id) => {
     const res = guard(await fetch(`/api/locker/${id}/reset`, { method: 'POST', headers: authHeaders }))
     const data = await res.json()
-    setResetMsg({ [id]: res.ok ? 'Slot reset — open again.' : data.error })
+    setResetMsg({ [id]: res.ok ? t('ad.reset.ok') : data.error })
     refresh(); refreshLog()
     setTimeout(() => setResetMsg(m => { const n = {...m}; delete n[id]; return n }), 2800)
   }
@@ -74,32 +90,32 @@ export default function AdminPage({ token, onLogout }) {
 
       {/* Header */}
       <div style={{ marginBottom: 22, animation: 'riseIn 0.5s cubic-bezier(0.2,0.7,0.2,1) both' }}>
-        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: '0.18em', color: 'oklch(0.5 0.12 295)', marginBottom: 8 }}>
-          DELIVERY GRID · BAY A
+        <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 11, letterSpacing: '0.18em', color: 'oklch(0.5 0.12 295)', marginBottom: 8 }}>
+          {t('ad.tag')}
         </div>
-        <h1 style={{ margin: '0 0 8px', fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }}>Tap a slot.</h1>
+        <h1 style={{ margin: '0 0 8px', fontSize: 30, fontWeight: 700, letterSpacing: '-0.02em' }}>{t('ad.title')}</h1>
         <p style={{ margin: 0, color: '#6E6880', fontSize: 14, lineHeight: 1.5 }}>
-          Print a QR for each slot and stick it on the door. Couriers scan, set a code, parcel stays sealed until pickup.
+          {t('ad.copy')}
         </p>
       </div>
 
       {/* Sign out + stats */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12, animation: 'riseIn 0.5s 0.04s cubic-bezier(0.2,0.7,0.2,1) both' }}>
-        <button onClick={onLogout} style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.12em', minHeight: 36, padding: '7px 16px', borderRadius: 999, border: '1px solid rgba(43,39,51,0.12)', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)', color: '#8A8499', cursor: 'pointer' }}>
-          SIGN OUT
+        <button onClick={onLogout} style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.12em', minHeight: 36, padding: '7px 16px', borderRadius: 999, border: '1px solid rgba(43,39,51,0.12)', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)', color: '#8A8499', cursor: 'pointer' }}>
+          {t('ad.signout')}
         </button>
       </div>
 
       {/* Stats chips */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { count: total,       dot: 'oklch(0.75 0.1 295)', label: 'TOTAL',  delay: '0.06s' },
-          { count: openCount,   dot: 'oklch(0.78 0.1 165)', label: 'OPEN',   delay: '0.11s' },
-          { count: lockedCount, dot: 'oklch(0.78 0.1 30)',  label: 'LOCKED', delay: '0.16s' },
+          { count: total,       dot: 'oklch(0.75 0.1 295)', label: t('ad.stat.total'),  delay: '0.06s' },
+          { count: openCount,   dot: 'oklch(0.78 0.1 165)', label: t('ad.stat.open'),   delay: '0.11s' },
+          { count: lockedCount, dot: 'oklch(0.78 0.1 30)',  label: t('ad.stat.locked'), delay: '0.16s' },
         ].map(s => (
           <div key={s.label} style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 18, padding: '14px 16px', boxShadow: '0 6px 20px oklch(0.65 0.08 295 / 0.07)', animation: `riseIn 0.5s ${s.delay} cubic-bezier(0.2,0.7,0.2,1) both` }}>
             <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1 }}>{s.count}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.14em', color: '#8A8499', marginTop: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.14em', color: '#8A8499', marginTop: 4 }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.dot, flexShrink: 0 }} />
               {s.label}
             </div>
@@ -110,8 +126,41 @@ export default function AdminPage({ token, onLogout }) {
       {/* Base URL control */}
       <div style={{ marginBottom: 20, background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 20, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'riseIn 0.5s 0.2s cubic-bezier(0.2,0.7,0.2,1) both' }}>
         <div>
-          <label style={{ display: 'block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.16em', color: '#8A8499', marginBottom: 6 }}>BASE URL</label>
+          <label style={{ display: 'block', fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.16em', color: '#8A8499', marginBottom: 6 }}>{t('ad.label.baseurl')}</label>
           <input className="sl-input" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+        </div>
+
+        {/* SMS on-lock toggle */}
+        <div style={{ borderTop: '1px solid rgba(43,39,51,0.07)', paddingTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#2B2733' }}>{t('ad.sms.label')}</span>
+              <span style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 9, letterSpacing: '0.1em', padding: '2px 7px', borderRadius: 999,
+                background: smsEnabled ? 'oklch(0.93 0.05 165)' : 'oklch(0.94 0.01 295)',
+                color: smsEnabled ? 'oklch(0.42 0.09 165)' : '#9A94A8' }}>
+                {smsEnabled ? t('ad.sms.on') : t('ad.sms.off')}
+              </span>
+            </div>
+            <div style={{ fontSize: 11.5, color: '#8A8499', lineHeight: 1.45, marginTop: 4 }}>{t('ad.sms.hint')}</div>
+          </div>
+          <button
+            role="switch" aria-checked={smsEnabled} aria-label={t('ad.sms.label')}
+            onClick={toggleSms} disabled={smsBusy}
+            style={{
+              position: 'relative', flexShrink: 0, width: 50, height: 30, borderRadius: 999, border: 'none',
+              cursor: smsBusy ? 'default' : 'pointer', padding: 0,
+              background: smsEnabled ? 'oklch(0.62 0.13 165)' : 'oklch(0.86 0.02 295)',
+              opacity: smsBusy ? 0.6 : 1,
+              transition: 'background 0.3s',
+              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.12)',
+            }}>
+            <span style={{
+              position: 'absolute', top: 3, left: 3, width: 24, height: 24, borderRadius: '50%', background: '#FBFAF7',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.22)',
+              transform: smsEnabled ? 'translateX(20px)' : 'translateX(0)',
+              transition: 'transform 0.3s cubic-bezier(0.3, 1.3, 0.4, 1)',
+            }} />
+          </button>
         </div>
       </div>
 
@@ -141,20 +190,20 @@ export default function AdminPage({ token, onLogout }) {
       {/* Activity log */}
       <div style={{ marginTop: 24 }}>
         <button onClick={() => { setShowLog(s => !s); refreshLog() }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(12px)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 16, padding: '13px 16px', cursor: 'pointer' }}>
-          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: '0.14em', color: '#6E6880' }}>ACTIVITY LOG</span>
+          <span style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 11, letterSpacing: '0.14em', color: '#6E6880' }}>{t('ad.log')}</span>
           <span style={{ fontSize: 12, color: '#ABA4BC', transform: showLog ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
         </button>
         {showLog && (
           <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 16, overflow: 'hidden', animation: 'riseIn 0.3s both' }}>
-            {log.length === 0 && <div style={{ padding: 16, fontSize: 13, color: '#8A8499', textAlign: 'center' }}>No activity yet.</div>}
+            {log.length === 0 && <div style={{ padding: 16, fontSize: 13, color: '#8A8499', textAlign: 'center' }}>{t('ad.log.empty')}</div>}
             {log.map((e, i) => {
               const c = e.ok ? { bg: 'oklch(0.93 0.05 165)', fg: 'oklch(0.42 0.09 165)' } : { bg: 'oklch(0.93 0.05 30)', fg: 'oklch(0.45 0.11 30)' }
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i ? '1px solid rgba(43,39,51,0.05)' : 'none' }}>
-                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 700, minWidth: 26 }}>{pad(e.slot)}</span>
-                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: '0.1em', padding: '3px 8px', borderRadius: 999, background: c.bg, color: c.fg, textTransform: 'uppercase' }}>{e.action}{e.ok ? '' : ' ✗'}</span>
+                  <span style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 11, fontWeight: 700, minWidth: 26 }}>{pad(e.slot)}</span>
+                  <span style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 9, letterSpacing: '0.1em', padding: '3px 8px', borderRadius: 999, background: c.bg, color: c.fg, textTransform: 'uppercase' }}>{e.action}{e.ok ? '' : ' ✗'}</span>
                   <span style={{ fontSize: 12, color: '#8A8499' }}>{e.method}</span>
-                  <span style={{ marginLeft: 'auto', fontFamily: "'Space Mono', monospace", fontSize: 10, color: '#ABA4BC' }}>{e.time.replace('T', ' ').slice(5)}</span>
+                  <span style={{ marginLeft: 'auto', fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, color: '#ABA4BC' }}>{e.time.replace('T', ' ').slice(5)}</span>
                 </div>
               )
             })}
@@ -194,6 +243,7 @@ function LockGlyph({ open }) {
 }
 
 function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, resetMsg, isCopied, onToggle, onOpen, onReset, onGenerate, onCopy, onClearLink }) {
+  const { t } = useLang()
   const locked = locker.locked
   const mint = { bg: 'oklch(0.93 0.05 165)', fg: 'oklch(0.42 0.09 165)', dot: 'oklch(0.7 0.12 165)' }
   const rose = { bg: 'oklch(0.93 0.05 30)',  fg: 'oklch(0.45 0.11 30)',  dot: 'oklch(0.68 0.15 30)' }
@@ -239,7 +289,7 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                 position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
                 borderRadius: 15, background: c.bg, color: c.fg,
                 display: 'grid', placeItems: 'center',
-                fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 15,
+                fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontWeight: 700, fontSize: 15,
               }}>
                 {pad(locker.id)}
               </div>
@@ -269,8 +319,8 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
         {/* Slot label */}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>Slot {pad(locker.id)}</div>
-          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.08em', color: '#8A8499', marginTop: 3 }}>
-            {locked ? 'Occupied · parcel inside' : 'Available · ready for drop'}
+          <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.08em', color: '#8A8499', marginTop: 3 }}>
+            {locked ? t('ad.slot.occupied') : t('ad.slot.available')}
           </div>
         </div>
 
@@ -278,14 +328,14 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
         <div style={{ display: 'flex' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 7,
-            fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.12em',
+            fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.12em',
             padding: '7px 12px', borderRadius: 999, background: c.bg, color: c.fg,
           }}>
             <span style={{ position: 'relative', width: 7, height: 7, flexShrink: 0 }}>
               <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: c.dot }} />
               {locked && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: c.dot, animation: 'dotPing 1.8s ease-out infinite' }} />}
             </span>
-            {locked ? 'LOCKED' : 'OPEN'}
+            {locked ? t('ad.slot.locked') : t('ad.slot.open')}
           </div>
         </div>
       </button>
@@ -312,8 +362,8 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                 <QRCodeSVG value={`${baseUrl}/locker/${locker.id}`} size={92} fgColor="#2B2733" bgColor="transparent" />
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: '0.14em', color: '#8A8499', marginBottom: 5 }}>SLOT QR</div>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: '#9A94A8', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 9, letterSpacing: '0.14em', color: '#8A8499', marginBottom: 5 }}>{t('ad.qr')}</div>
+                <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, color: '#9A94A8', wordBreak: 'break-all', lineHeight: 1.5 }}>
                   {baseUrl}/locker/{locker.id}
                 </div>
               </div>
@@ -331,7 +381,7 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
               onMouseUp={e => e.currentTarget.style.transform = ''}
               onMouseLeave={e => e.currentTarget.style.transform = ''}
             >
-              Open locker page →
+              {t('ad.btn.openpage')}
             </button>
 
             {/* Locked-only actions */}
@@ -350,7 +400,7 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                     animation: generating ? 'shimmer 1.2s linear infinite' : undefined,
                     transition: 'transform 0.15s',
                   }}>
-                    {generating ? 'Generating…' : 'Generate unlock link'}
+                    {generating ? t('ad.btn.gen') : t('ad.btn.genlink')}
                   </button>
                 ) : (
                   <div style={{
@@ -359,8 +409,8 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                     border: '1px solid oklch(0.9 0.04 295)',
                     animation: 'riseIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both',
                   }}>
-                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: '0.14em', color: '#8A8499' }}>
-                      UNLOCK LINK · ONE TIME USE
+                    <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 9, letterSpacing: '0.14em', color: '#8A8499' }}>
+                      {t('ad.link.title')}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'center', background: '#FFFFFF', borderRadius: 12, padding: 10, border: '1px solid rgba(43,39,51,0.06)' }}>
                       <div style={{ width: 104, height: 104, animation: 'qrPop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.2) both' }}>
@@ -375,7 +425,7 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                         background: isCopied ? 'oklch(0.93 0.05 165)' : 'transparent',
                         color: isCopied ? 'oklch(0.42 0.09 165)' : '#2B2733',
                       }}>
-                        {isCopied ? 'Copied ✓' : 'Copy link'}
+                        {isCopied ? t('ad.btn.copied') : t('ad.btn.copy')}
                       </button>
                       <button onClick={onClearLink} style={{
                         flex: 1, minHeight: 44, border: '1px solid rgba(43,39,51,0.12)',
@@ -386,7 +436,7 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                         onMouseOver={e => e.currentTarget.style.background = 'oklch(0.95 0.03 295)'}
                         onMouseOut={e => e.currentTarget.style.background = 'transparent'}
                       >
-                        Clear
+                        {t('ad.btn.clear')}
                       </button>
                     </div>
                   </div>
@@ -403,7 +453,7 @@ function SlotCard({ locker, index, baseUrl, isExpanded, unlockLink, generating, 
                   onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
                   onMouseUp={e => e.currentTarget.style.transform = ''}
                 >
-                  Reset slot
+                  {t('ad.btn.reset')}
                 </button>
               </>
             )}

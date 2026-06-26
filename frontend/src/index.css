@@ -1,5 +1,5 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #FBFAF7; font-family: 'Space Grotesk', ui-sans-serif, sans-serif; color: #2B2733; }
+body { background: #FBFAF7; font-family: 'Space Grotesk', 'IBM Plex Sans Thai', ui-sans-serif, sans-serif; color: #2B2733; }
 button, input { font-family: inherit; }
 input::placeholder { color: #ABA4BC; }
 
@@ -15,6 +15,9 @@ input::placeholder { color: #ABA4BC; }
 @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
 @keyframes sheen { 0%{transform:translateX(-120%) skewX(-18deg)} 100%{transform:translateX(240%) skewX(-18deg)} }
 @keyframes qrPop { 0%{transform:scale(0.92);opacity:0} 60%{transform:scale(1.02)} 100%{transform:scale(1);opacity:1} }
+@keyframes spin { to{transform:rotate(360deg)} }
+@keyframes planeLaunch { 0%,100%{transform:translate(-2px,2px) rotate(0deg)} 50%{transform:translate(3px,-3px) rotate(8deg)} }
+@keyframes dotsBlink { 0%,20%{opacity:0.2} 50%{opacity:1} 80%,100%{opacity:0.2} }
 
 .sl-input {
   width: 100%; padding: 13px 16px; border-radius: 14px;

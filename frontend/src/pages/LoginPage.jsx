@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import LockIcon from '../components/LockIcon'
+import { useLang } from '../i18n'
 
 export default function LoginPage({ onLogin }) {
+  const { t } = useLang()
   const [pw, setPw] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [show, setShow] = useState(false)
 
   const handleLogin = async () => {
-    if (!pw) return setError('Enter admin password.')
+    if (!pw) return setError(t('lg.err.enter'))
     setBusy(true); setError('')
     const res = await fetch('/api/admin/login', {
       method: 'POST',
@@ -18,7 +20,7 @@ export default function LoginPage({ onLogin }) {
     const data = await res.json()
     setBusy(false)
     if (res.ok) { onLogin(data.token) }
-    else setError(data.error || 'Wrong password.')
+    else setError(data.error || t('lg.err.wrong'))
   }
 
   return (
@@ -33,20 +35,20 @@ export default function LoginPage({ onLogin }) {
 
         {/* Header */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: '0.2em', color: 'oklch(0.5 0.12 295)', marginBottom: 8 }}>ADMIN ACCESS</div>
-          <h1 style={{ fontSize: 38, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>Sign in.</h1>
-          <p style={{ color: '#6E6880', fontSize: 15, lineHeight: 1.55 }}>Enter the admin password to access the dashboard.</p>
+          <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 11, letterSpacing: '0.2em', color: 'oklch(0.5 0.12 295)', marginBottom: 8 }}>{t('lg.tag')}</div>
+          <h1 style={{ fontSize: 38, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 8 }}>{t('lg.title')}</h1>
+          <p style={{ color: '#6E6880', fontSize: 15, lineHeight: 1.55 }}>{t('lg.copy')}</p>
         </div>
 
         {/* Form */}
         <div style={{ width: '100%', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', border: '1px solid rgba(43,39,51,0.07)', borderRadius: 24, padding: 24, display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 18px 50px oklch(0.65 0.08 295 / 0.14)' }}>
           <div>
-            <label style={{ display: 'block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.16em', color: '#8A8499', marginBottom: 7 }}>PASSWORD</label>
+            <label style={{ display: 'block', fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.16em', color: '#8A8499', marginBottom: 7 }}>{t('lg.label.pw')}</label>
             <div style={{ position: 'relative' }}>
               <input
                 className="sl-input"
                 type={show ? 'text' : 'password'}
-                placeholder="Admin password"
+                placeholder={t('lg.ph.pw')}
                 value={pw}
                 onChange={e => { setPw(e.target.value); setError('') }}
                 onKeyDown={e => e.key === 'Enter' && handleLogin()}
@@ -59,7 +61,7 @@ export default function LoginPage({ onLogin }) {
                 style={{
                   position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
                   border: 'none', background: 'transparent',
-                  fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.12em',
+                  fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.12em',
                   color: '#6E6880', cursor: 'pointer', padding: '8px 10px', borderRadius: 10,
                 }}
               >
@@ -73,7 +75,7 @@ export default function LoginPage({ onLogin }) {
             </div>
           )}
           <button className="sl-btn-primary" onClick={handleLogin} disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign In'}
+            {busy ? t('lg.btn.signing') : t('lg.btn.signin')}
           </button>
         </div>
 

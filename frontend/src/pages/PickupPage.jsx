@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import LockIcon from '../components/LockIcon'
+import { useLang } from '../i18n'
 
 const MINT_BG = 'oklch(0.93 0.05 165)', MINT_FG = 'oklch(0.42 0.09 165)'
 const ROSE_BG = 'oklch(0.93 0.05 30)',  ROSE_FG = 'oklch(0.45 0.11 30)'
 
 export default function PickupPage() {
   const { token } = useParams()
+  const { t } = useLang()
   const [phase, setPhase] = useState('idle')   // idle | unlocking | success | error
   const [lockerId, setLockerId] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -17,10 +19,10 @@ export default function PickupPage() {
       const res = await fetch(`/api/pickup/${token}`)
       const data = await res.json()
       if (res.ok) { setPhase('success'); setLockerId(data.locker_id) }
-      else { setPhase('error'); setErrorMsg(data.error || 'Link is invalid or already used.') }
+      else { setPhase('error'); setErrorMsg(data.error || t('pk.err.invalid')) }
     } catch {
       setPhase('error')
-      setErrorMsg('Could not reach server.')
+      setErrorMsg(t('lk.err.server'))
     }
   }
 
@@ -43,22 +45,22 @@ export default function PickupPage() {
 
         {/* Text */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: '0.2em', color: 'oklch(0.5 0.12 295)', marginBottom: 8 }}>
-            PICKUP LINK
+          <div style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 11, letterSpacing: '0.2em', color: 'oklch(0.5 0.12 295)', marginBottom: 8 }}>
+            {t('pk.tag')}
           </div>
           <h1 style={{ fontSize: 38, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 12 }}>
-            {isIdle && 'Your delivery.'}
-            {phase === 'unlocking' && 'Opening…'}
-            {isSuccess && 'Unlocked.'}
-            {phase === 'error' && 'Invalid Link.'}
+            {isIdle && t('pk.title.idle')}
+            {phase === 'unlocking' && t('pk.title.opening')}
+            {isSuccess && t('pk.title.success')}
+            {phase === 'error' && t('pk.title.error')}
           </h1>
-          {isIdle && <div style={{ display: 'inline-block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.14em', padding: '6px 14px', borderRadius: 999, background: ROSE_BG, color: ROSE_FG, marginBottom: 12 }}>LOCKED</div>}
-          {isSuccess && <div style={{ display: 'inline-block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.14em', padding: '6px 14px', borderRadius: 999, background: MINT_BG, color: MINT_FG, marginBottom: 12 }}>OPEN</div>}
-          {phase === 'error' && <div style={{ display: 'inline-block', fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: '0.14em', padding: '6px 14px', borderRadius: 999, background: ROSE_BG, color: ROSE_FG, marginBottom: 12 }}>EXPIRED</div>}
+          {isIdle && <div style={{ display: 'inline-block', fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.14em', padding: '6px 14px', borderRadius: 999, background: ROSE_BG, color: ROSE_FG, marginBottom: 12 }}>{t('pk.pill.locked')}</div>}
+          {isSuccess && <div style={{ display: 'inline-block', fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.14em', padding: '6px 14px', borderRadius: 999, background: MINT_BG, color: MINT_FG, marginBottom: 12 }}>{t('pk.pill.open')}</div>}
+          {phase === 'error' && <div style={{ display: 'inline-block', fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 10, letterSpacing: '0.14em', padding: '6px 14px', borderRadius: 999, background: ROSE_BG, color: ROSE_FG, marginBottom: 12 }}>{t('pk.pill.expired')}</div>}
           <p style={{ color: '#6E6880', fontSize: 15, lineHeight: 1.55 }}>
-            {isIdle && 'Tap the button below to unlock the locker and retrieve your parcel.'}
-            {phase === 'unlocking' && 'Verifying and unlocking…'}
-            {isSuccess && `Door released — grab your delivery from slot ${String(lockerId).padStart(2, '0')}. This link is now expired.`}
+            {isIdle && t('pk.copy.idle')}
+            {phase === 'unlocking' && t('pk.copy.opening')}
+            {isSuccess && t('pk.copy.success', { n: String(lockerId).padStart(2, '0') })}
             {phase === 'error' && errorMsg}
           </p>
         </div>
@@ -70,7 +72,7 @@ export default function PickupPage() {
             background: 'oklch(0.4 0.13 295)', color: '#FBFAF7',
             border: 'none', cursor: 'pointer',
             fontSize: 13, fontWeight: 700, letterSpacing: '0.05em',
-            fontFamily: "'Space Mono', monospace",
+            fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace",
             boxShadow: '0 12px 36px oklch(0.55 0.13 295 / 0.4)',
             transition: 'transform 0.2s, box-shadow 0.2s',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -81,13 +83,13 @@ export default function PickupPage() {
             onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
             onMouseUp={e => e.currentTarget.style.transform = 'scale(1.06)'}
           >
-            UNLOCK
+            {t('pk.btn.unlock')}
           </button>
         )}
 
         {phase === 'error' && (
-          <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: '#8A8499', textAlign: 'center' }}>
-            Ask the sender to generate a new link.
+          <p style={{ fontFamily: "'Space Mono', 'IBM Plex Sans Thai', monospace", fontSize: 11, color: '#8A8499', textAlign: 'center' }}>
+            {t('pk.err.newlink')}
           </p>
         )}
 

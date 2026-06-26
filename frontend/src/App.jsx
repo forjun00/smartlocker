@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Background from './components/Background'
 import Nav from './components/Nav'
+import LangToggle from './components/LangToggle'
 import AdminPage from './pages/AdminPage'
 import LockerPage from './pages/LockerPage'
 import PickupPage from './pages/PickupPage'
@@ -17,6 +18,7 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', position: 'relative', overflowX: 'hidden' }}>
       <Background />
+      <LangToggle />
       {showNav && !( isAdmin && !authed) && <Nav />}
       <div style={{ position: 'relative', zIndex: 1 }}>
         <Routes>
