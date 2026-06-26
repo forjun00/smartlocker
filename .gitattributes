@@ -1,0 +1,4 @@
+# Deploy scripts/configs run on Linux — force LF so they never get CRLF on Windows
+deploy/*.sh   text eol=lf
+deploy/*.conf text eol=lf
+*.sh          text eol=lf
