@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 # Hash-routed subfolder deploy. For the Flask/clean-URL setup use e.g.
 # "http://172.16.110.115:3001" instead (no "/index.html#").
-DEFAULT_BASE = "https://app.mdbiot.com/smartlocker/index.html#"
+DEFAULT_BASE = "https://app.mdbiot.com/smartlocker/#"
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 

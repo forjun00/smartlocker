@@ -28,7 +28,7 @@ const MQTT_PORT      = 1883;
 
 // Base URL used inside the SMS pickup link. For a hash-routed subfolder deploy
 // it must point at the real index.html + '#'. Blank = derive scheme+host only.
-const PUBLIC_BASE_URL = 'https://app.mdbiot.com/smartlocker/index.html#';
+const PUBLIC_BASE_URL = 'https://app.mdbiot.com/smartlocker/#';
 
 // ---------------------------------------------------------------------------
 // Boot

@@ -30,7 +30,7 @@ export default function AdminPage({ token, onLogout }) {
   const { t } = useLang()
   const [lockers, setLockers] = useState([])
   // Hash-routed, base-path-aware public URL for QR codes + unlock links
-  const [baseUrl, setBaseUrl] = useState(`${window.location.origin}${import.meta.env.BASE_URL}index.html#`)
+  const [baseUrl, setBaseUrl] = useState(`${window.location.origin}${import.meta.env.BASE_URL}#`)
   const [resetMsg, setResetMsg] = useState({})
   const [unlockLinks, setUnlockLinks] = useState({})
   const [generatingLink, setGeneratingLink] = useState({})

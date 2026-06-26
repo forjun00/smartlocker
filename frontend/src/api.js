@@ -17,8 +17,7 @@ export const api = (path, opts = {}) => {
   return fetch(u + bust, { cache: 'no-store', ...opts })
 }
 
-// Public app URL for QR codes / unlock links. Uses hash routing and an explicit
-// index.html so it works in a subfolder with no server rewrites.
-//   appUrl('/locker/1')  ->  https://host/<base>index.html#/locker/1
+// Public app URL for QR codes / unlock links. Hash routing, no rewrites needed.
+//   appUrl('/locker/1')  ->  https://host/<base>#/locker/1
 export const appUrl = (hashPath) =>
-  `${window.location.origin}${import.meta.env.BASE_URL}index.html#${hashPath}`
+  `${window.location.origin}${import.meta.env.BASE_URL}#${hashPath}`
