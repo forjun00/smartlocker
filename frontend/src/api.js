@@ -8,7 +8,14 @@
 const API_BASE = import.meta.env.VITE_API_BASE || '/api/'
 
 export const apiUrl = (path) => API_BASE + path
-export const api = (path, opts) => fetch(apiUrl(path), opts)
+
+// Always fetch fresh: cache:'no-store' + a unique ?_=timestamp so a previously
+// cached GET (e.g. an old lock status) can never be served from the browser/CDN.
+export const api = (path, opts = {}) => {
+  const u = apiUrl(path)
+  const bust = `${u.includes('?') ? '&' : '?'}_=${Date.now()}`
+  return fetch(u + bust, { cache: 'no-store', ...opts })
+}
 
 // Public app URL for QR codes / unlock links. Uses hash routing and an explicit
 // index.html so it works in a subfolder with no server rewrites.
